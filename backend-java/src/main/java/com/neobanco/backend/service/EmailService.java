@@ -1,15 +1,18 @@
 package com.neobanco.backend.service;
 
+import com.resend.*;
+import com.resend.core.exception.ResendException;
+import com.resend.services.emails.model.CreateEmailOptions;
+import com.resend.services.emails.model.CreateEmailResponse;
 import org.springframework.stereotype.Service;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.UUID;
 
 @Service
 public class EmailService {
+
+    private final String RESEND_API_KEY = System.getenv("RESEND_API_KEY") != null 
+            ? System.getenv("RESEND_API_KEY") 
+            : "re_placeholder";
+    private final String FROM_EMAIL = "onboarding@resend.dev"; // Sender default de Resend para pruebas
 
     public void enviarEmailRegistro(String nombre, String email, String token) {
         String asunto = "Neo Banco - Comprueba tu cuenta";
@@ -22,7 +25,7 @@ public class EmailService {
                 + "<p>Ingresa este codigo en la aplicacion para comprobar tu cuenta.</p>"
                 + "</div>";
 
-        enviarCorreoHtmlPython(email, asunto, htmlMsg);
+        enviarConResend(email, asunto, htmlMsg);
     }
 
     public void enviarEmailOlvidePassword(String nombre, String email, String token) {
@@ -35,7 +38,7 @@ public class EmailService {
                 + "<p>Por favor, ingresa este codigo en la aplicacion de Neo Banco.</p>"
                 + "</div>";
 
-        enviarCorreoHtmlPython(email, asunto, htmlMsg);
+        enviarConResend(email, asunto, htmlMsg);
     }
 
     public void enviarEmailEliminarCuenta(String nombre, String email, String token) {
@@ -48,47 +51,28 @@ public class EmailService {
                 + "<p>Si no fuiste tú, ignora este correo.</p>"
                 + "</div>";
 
-        enviarCorreoHtmlPython(email, asunto, htmlMsg);
+        enviarConResend(email, asunto, htmlMsg);
     }
 
-    private void enviarCorreoHtmlPython(String to, String subject, String bodyHtml) {
+    private void enviarConResend(String to, String subject, String bodyHtml) {
         try {
-            File tempFile = File.createTempFile("email_" + UUID.randomUUID().toString(), ".html");
-            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(new java.io.FileOutputStream(tempFile), java.nio.charset.StandardCharsets.UTF_8)) {
-                writer.write(bodyHtml);
-            }
+            Resend resend = new Resend(RESEND_API_KEY);
 
-            ProcessBuilder pb = new ProcessBuilder("python", "send_email.py", to, subject, tempFile.getAbsolutePath());
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
+            CreateEmailOptions params = CreateEmailOptions.builder()
+                    .from(FROM_EMAIL)
+                    .to(to)
+                    .subject(subject)
+                    .html(bodyHtml)
+                    .build();
 
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            StringBuilder output = new StringBuilder();
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
+            CreateEmailResponse data = resend.emails().send(params);
+            System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA RESEND ID: " + data.getId() + ") ======");
 
-            int exitCode = process.waitFor();
-
-            // LOG DE DIAGNOSTICO
-            try (java.io.FileWriter fw = new java.io.FileWriter("email_log.txt", true)) {
-                fw.write("Intentando enviar a: " + to + "\n");
-                fw.write("Asunto: " + subject + "\n");
-                fw.write("Exit code: " + exitCode + "\n");
-                fw.write("Output: " + output.toString() + "\n");
-                fw.write("------------------------\n");
-            }
-
-            if (exitCode != 0 || !output.toString().contains("SUCCESS")) {
-                System.err.println("Error ejecutando Python para email: " + output.toString());
-                throw new RuntimeException("Python Email Error: " + output.toString());
-            } else {
-                System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA PYTHON) ======");
-            }
-
+        } catch (ResendException e) {
+            System.err.println("Error ejecutando Resend API para email: " + e.getMessage());
+            throw new RuntimeException("Resend API Error: " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("Excepción crítica intentando ejecutar Python para el correo:");
+            System.err.println("Excepción crítica intentando enviar correo:");
             e.printStackTrace();
             throw new RuntimeException("Error en EmailService: " + e.getMessage(), e);
         }

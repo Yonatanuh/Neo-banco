@@ -103,7 +103,7 @@ public class UsuarioController {
                 } catch (Exception e) {}
                 
                 Map<String, Object> response = new HashMap<>();
-                response.put("mensaje", "Modo Demo - Tu cuenta no está confirmada. Usa este código: " + existeUsuario.getToken());
+                response.put("mensaje", "Tu cuenta ya existe pero no está confirmada. Te hemos reenviado el código al correo.");
                 response.put("require2FA", true);
 
                 
@@ -143,16 +143,11 @@ public class UsuarioController {
         tarjeta.setUpdatedAt(LocalDateTime.now());
         tarjetaRepository.save(tarjeta);
 
-        // Enviar correo real (Fallará en Render Free por bloqueo de puertos SMTP)
-        try {
-            emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
-        } catch (Exception e) {
-            System.err.println("No se pudo enviar el correo (posible bloqueo SMTP de Render).");
-        }
+        // Enviar correo real
+        emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
 
         Map<String, String> response = new HashMap<>();
-        // Mensaje modificado para Portafolio/Demo
-        response.put("mensaje", "Usuario creado. (Modo Demo - Tu código de activación es: " + usuarioGuardado.getToken() + ")");
+        response.put("mensaje", "Usuario creado. Revisa tu correo para verificar tu cuenta.");
 
         System.out.println("==================================================");
         System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
@@ -213,13 +208,9 @@ public class UsuarioController {
             // Generar nuevo código y reenviar correo si la cuenta no está confirmada
             usuario.setToken(generarCodigo());
             usuarioRepository.save(usuario);
-            try {
-                emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
-            } catch (Exception e) {
-                System.err.println("No se pudo enviar el correo en reintento (bloqueo SMTP).");
-            }
+            emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
             
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Modo Demo - Tu nuevo código de activación es: " + usuario.getToken(), true));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Tu cuenta no ha sido confirmada. Te hemos enviado un nuevo código al correo.", true));
         }
 
         if (usuario.getIsActive() != null && !usuario.getIsActive()) {
@@ -272,12 +263,10 @@ public class UsuarioController {
         usuarioRepository.save(usuario);
 
         // Enviar correo real
-        try {
-            emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
-        } catch (Exception e) {}
+        emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
 
         Map<String, String> response = new HashMap<>();
-        response.put("mensaje", "Modo Demo - Código para recuperar tu cuenta: " + tokenGenerado);
+        response.put("mensaje", "Hemos enviado un correo con las instrucciones");
 
 
         System.out.println("==================================================");
@@ -329,11 +318,9 @@ public class UsuarioController {
         usuario.setToken(token);
         usuarioRepository.save(usuario);
 
-        try {
-            emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
-        } catch (Exception e) {}
+        emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
 
-        return ResponseEntity.ok(new MessageResponse("Modo Demo - Código para eliminar tu cuenta: " + token));
+        return ResponseEntity.ok(new MessageResponse("Hemos enviado un código a tu correo para confirmar la eliminación"));
     }
 
     // ============ CONFIRMAR ELIMINAR CUENTA ============
