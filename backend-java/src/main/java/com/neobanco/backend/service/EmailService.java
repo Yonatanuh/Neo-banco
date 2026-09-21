@@ -82,6 +82,7 @@ public class EmailService {
 
             if (exitCode != 0 || !output.toString().contains("SUCCESS")) {
                 System.err.println("Error ejecutando Python para email: " + output.toString());
+                throw new RuntimeException("Python Email Error: " + output.toString());
             } else {
                 System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA PYTHON) ======");
             }
@@ -89,6 +90,7 @@ public class EmailService {
         } catch (Exception e) {
             System.err.println("Excepción crítica intentando ejecutar Python para el correo:");
             e.printStackTrace();
+            throw new RuntimeException("Error en EmailService: " + e.getMessage(), e);
         }
     }
 }
