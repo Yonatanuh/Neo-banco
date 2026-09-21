@@ -1,0 +1,32 @@
+# ==========================================
+# 1. ARCHIVOS COMPILADOS DE JAVA / MAVEN
+# ==========================================
+target/
+*.class
+*.jar
+*.war
+.mvn/wrapper/maven-wrapper.jar
+
+# ==========================================
+# 2. VARIABLES DE ENTORNO (¡POR SEGURIDAD!)
+# ==========================================
+.env
+.env.*
+*.local
+
+# ==========================================
+# 3. LOGS Y CACHÉ
+# ==========================================
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# ==========================================
+# 4. EDITORES Y SISTEMA OPERATIVO
+# ==========================================
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.iml
+.DS_Store

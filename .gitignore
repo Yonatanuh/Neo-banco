@@ -1,0 +1,17 @@
+# Backend Java
+backend-java/target/
+backend-java/jdk21/
+backend-java/apache-maven-*/
+backend-java/email_log.txt
+
+# Frontend React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# IDEs y SO
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
