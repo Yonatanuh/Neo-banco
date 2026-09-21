@@ -1,18 +1,18 @@
 package com.neobanco.backend.service;
 
-import com.resend.*;
-import com.resend.core.exception.ResendException;
-import com.resend.services.emails.model.CreateEmailOptions;
-import com.resend.services.emails.model.CreateEmailResponse;
 import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 
 @Service
 public class EmailService {
 
-    private final String RESEND_API_KEY = System.getenv("RESEND_API_KEY") != null 
-            ? System.getenv("RESEND_API_KEY") 
-            : "re_placeholder";
-    private final String FROM_EMAIL = "onboarding@resend.dev"; // Sender default de Resend para pruebas
+    // URL de tu Webhook de Google Apps Script
+    private final String GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbys7Zf_8iYrUArMpFPda38k3195skCnkOQFql5J-_felVM207KEsOVk_AQMU6UW7uOO/exec";
 
     public void enviarEmailRegistro(String nombre, String email, String token) {
         String asunto = "Neo Banco - Comprueba tu cuenta";
@@ -25,7 +25,7 @@ public class EmailService {
                 + "<p>Ingresa este codigo en la aplicacion para comprobar tu cuenta.</p>"
                 + "</div>";
 
-        enviarConResend(email, asunto, htmlMsg);
+        enviarConGoogleScript(email, asunto, htmlMsg);
     }
 
     public void enviarEmailOlvidePassword(String nombre, String email, String token) {
@@ -38,7 +38,7 @@ public class EmailService {
                 + "<p>Por favor, ingresa este codigo en la aplicacion de Neo Banco.</p>"
                 + "</div>";
 
-        enviarConResend(email, asunto, htmlMsg);
+        enviarConGoogleScript(email, asunto, htmlMsg);
     }
 
     public void enviarEmailEliminarCuenta(String nombre, String email, String token) {
@@ -51,30 +51,44 @@ public class EmailService {
                 + "<p>Si no fuiste tú, ignora este correo.</p>"
                 + "</div>";
 
-        enviarConResend(email, asunto, htmlMsg);
+        enviarConGoogleScript(email, asunto, htmlMsg);
     }
 
-    private void enviarConResend(String to, String subject, String bodyHtml) {
+    private void enviarConGoogleScript(String to, String subject, String bodyHtml) {
         try {
-            Resend resend = new Resend(RESEND_API_KEY);
+            String jsonPayload = String.format(
+                    "{\"to\":\"%s\", \"subject\":\"%s\", \"html\":\"%s\"}",
+                    escapeJson(to), escapeJson(subject), escapeJson(bodyHtml)
+            );
 
-            CreateEmailOptions params = CreateEmailOptions.builder()
-                    .from(FROM_EMAIL)
-                    .to(to)
-                    .subject(subject)
-                    .html(bodyHtml)
+            HttpClient client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.ALWAYS) // Importante para Google Scripts
+                    .connectTimeout(Duration.ofSeconds(15))
                     .build();
 
-            CreateEmailResponse data = resend.emails().send(params);
-            System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA RESEND ID: " + data.getId() + ") ======");
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(GOOGLE_SCRIPT_URL))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
 
-        } catch (ResendException e) {
-            System.err.println("Error ejecutando Resend API para email: " + e.getMessage());
-            throw new RuntimeException("Resend API Error: " + e.getMessage());
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200 && response.body().contains("SUCCESS")) {
+                System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA GOOGLE SCRIPT) ======");
+            } else {
+                throw new RuntimeException("Error en Google Script. Status: " + response.statusCode() + " Body: " + response.body());
+            }
+
         } catch (Exception e) {
-            System.err.println("Excepción crítica intentando enviar correo:");
+            System.err.println("Excepción crítica intentando enviar correo vía Webhook:");
             e.printStackTrace();
             throw new RuntimeException("Error en EmailService: " + e.getMessage(), e);
         }
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\"", "\\\"").replace("\n", "").replace("\r", "");
     }
 }
