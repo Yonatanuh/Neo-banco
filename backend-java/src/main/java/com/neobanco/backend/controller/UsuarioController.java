@@ -98,11 +98,12 @@ public class UsuarioController {
                 existeUsuario.setToken(generarCodigo());
                 usuarioRepository.save(existeUsuario);
                 
-                // Enviar correo real
-                emailService.enviarEmailRegistro(existeUsuario.getNombre(), existeUsuario.getEmail(), existeUsuario.getToken());
+                try {
+                    emailService.enviarEmailRegistro(existeUsuario.getNombre(), existeUsuario.getEmail(), existeUsuario.getToken());
+                } catch (Exception e) {}
                 
                 Map<String, Object> response = new HashMap<>();
-                response.put("mensaje", "Tu cuenta ya existe pero no está confirmada. Te hemos reenviado el código al correo.");
+                response.put("mensaje", "Modo Demo - Tu cuenta no está confirmada. Usa este código: " + existeUsuario.getToken());
                 response.put("require2FA", true);
 
                 
@@ -142,12 +143,16 @@ public class UsuarioController {
         tarjeta.setUpdatedAt(LocalDateTime.now());
         tarjetaRepository.save(tarjeta);
 
-        // Enviar correo real
-        emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
+        // Enviar correo real (Fallará en Render Free por bloqueo de puertos SMTP)
+        try {
+            emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
+        } catch (Exception e) {
+            System.err.println("No se pudo enviar el correo (posible bloqueo SMTP de Render).");
+        }
 
         Map<String, String> response = new HashMap<>();
-        response.put("mensaje", "Usuario creado. Revisa tu correo para verificar tu cuenta.");
-
+        // Mensaje modificado para Portafolio/Demo
+        response.put("mensaje", "Usuario creado. (Modo Demo - Tu código de activación es: " + usuarioGuardado.getToken() + ")");
 
         System.out.println("==================================================");
         System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
@@ -208,9 +213,13 @@ public class UsuarioController {
             // Generar nuevo código y reenviar correo si la cuenta no está confirmada
             usuario.setToken(generarCodigo());
             usuarioRepository.save(usuario);
-            emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
+            try {
+                emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
+            } catch (Exception e) {
+                System.err.println("No se pudo enviar el correo en reintento (bloqueo SMTP).");
+            }
             
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Tu cuenta no ha sido confirmada. Te hemos enviado un nuevo código al correo.", true));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Modo Demo - Tu nuevo código de activación es: " + usuario.getToken(), true));
         }
 
         if (usuario.getIsActive() != null && !usuario.getIsActive()) {
@@ -263,12 +272,12 @@ public class UsuarioController {
         usuarioRepository.save(usuario);
 
         // Enviar correo real
-        emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
+        try {
+            emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
+        } catch (Exception e) {}
 
-        // Como no hay un servidor SMTP (ej. SendGrid o Gmail) configurado en application.properties,
-        // devolvemos el token en la respuesta para que el usuario pueda probarlo en desarrollo.
         Map<String, String> response = new HashMap<>();
-        response.put("mensaje", "Hemos enviado un correo con las instrucciones");
+        response.put("mensaje", "Modo Demo - Código para recuperar tu cuenta: " + tokenGenerado);
 
 
         System.out.println("==================================================");
@@ -320,9 +329,11 @@ public class UsuarioController {
         usuario.setToken(token);
         usuarioRepository.save(usuario);
 
-        emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
+        try {
+            emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
+        } catch (Exception e) {}
 
-        return ResponseEntity.ok(new MessageResponse("Hemos enviado un código a tu correo para confirmar la eliminación"));
+        return ResponseEntity.ok(new MessageResponse("Modo Demo - Código para eliminar tu cuenta: " + token));
     }
 
     // ============ CONFIRMAR ELIMINAR CUENTA ============
