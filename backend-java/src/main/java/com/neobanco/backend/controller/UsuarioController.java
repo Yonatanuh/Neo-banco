@@ -181,6 +181,12 @@ public class UsuarioController {
         return ResponseEntity.ok(new MessageResponse("Usuario Confirmado Correctamente"));
     }
 
+    // ============ PING (DESPERTADOR) ============
+    @GetMapping("/ping")
+    public ResponseEntity<?> ping() {
+        return ResponseEntity.ok(Map.of("mensaje", "Servidor despierto y activo"));
+    }
+
     // ============ LOGIN ============
 
     @PostMapping("/login")

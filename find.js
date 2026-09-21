@@ -1,0 +1,1 @@
+const fs = require('fs'); const content = fs.readFileSync('temp.js', 'utf8'); const match = content.match(/baseURL:\s*([^\,}]+)/); console.log(match ? match[1] : 'Not found');

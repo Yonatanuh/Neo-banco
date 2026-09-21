@@ -33,6 +33,7 @@ public class SecurityConfig {
                     "/api/usuarios/confirmar", 
                     "/api/usuarios/olvide-password", 
                     "/api/usuarios/nuevo-password",
+                    "/api/usuarios/ping",
                     "/error"
                 ).permitAll()
                 .anyRequest().authenticated()
