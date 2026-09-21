@@ -98,12 +98,19 @@ public class UsuarioController {
                 existeUsuario.setToken(generarCodigo());
                 usuarioRepository.save(existeUsuario);
                 
+                boolean correoEnviado = true;
                 try {
                     emailService.enviarEmailRegistro(existeUsuario.getNombre(), existeUsuario.getEmail(), existeUsuario.getToken());
-                } catch (Exception e) {}
+                } catch (Exception e) {
+                    correoEnviado = false;
+                }
                 
                 Map<String, Object> response = new HashMap<>();
-                response.put("mensaje", "Tu cuenta ya existe pero no está confirmada. Te hemos reenviado el código al correo.");
+                if (correoEnviado) {
+                    response.put("mensaje", "Tu cuenta ya existe pero no está confirmada. Te hemos reenviado el código al correo.");
+                } else {
+                    response.put("mensaje", "Modo Demo - Cuenta no confirmada. Usa este código: " + existeUsuario.getToken());
+                }
                 response.put("require2FA", true);
 
                 
@@ -144,10 +151,20 @@ public class UsuarioController {
         tarjetaRepository.save(tarjeta);
 
         // Enviar correo real
-        emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
+        boolean correoEnviado = true;
+        try {
+            emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
+        } catch (Exception e) {
+            System.err.println("Error enviando correo (posible límite de Sandbox de Resend): " + e.getMessage());
+            correoEnviado = false;
+        }
 
         Map<String, String> response = new HashMap<>();
-        response.put("mensaje", "Usuario creado. Revisa tu correo para verificar tu cuenta.");
+        if (correoEnviado) {
+            response.put("mensaje", "Usuario creado. Revisa tu correo para verificar tu cuenta.");
+        } else {
+            response.put("mensaje", "Usuario creado. (Modo Demo: Código de activación: " + usuarioGuardado.getToken() + ")");
+        }
 
         System.out.println("==================================================");
         System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
@@ -208,9 +225,18 @@ public class UsuarioController {
             // Generar nuevo código y reenviar correo si la cuenta no está confirmada
             usuario.setToken(generarCodigo());
             usuarioRepository.save(usuario);
-            emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
+            boolean correoEnviado = true;
+            try {
+                emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
+            } catch (Exception e) {
+                correoEnviado = false;
+            }
             
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Tu cuenta no ha sido confirmada. Te hemos enviado un nuevo código al correo.", true));
+            String msg = correoEnviado 
+                ? "Tu cuenta no ha sido confirmada. Te hemos enviado un nuevo código al correo."
+                : "Modo Demo - Tu nuevo código de activación es: " + usuario.getToken();
+            
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse(msg, true));
         }
 
         if (usuario.getIsActive() != null && !usuario.getIsActive()) {
@@ -263,10 +289,19 @@ public class UsuarioController {
         usuarioRepository.save(usuario);
 
         // Enviar correo real
-        emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
+        boolean correoEnviado = true;
+        try {
+            emailService.enviarEmailOlvidePassword(usuario.getNombre(), usuario.getEmail(), tokenGenerado);
+        } catch (Exception e) {
+            correoEnviado = false;
+        }
 
         Map<String, String> response = new HashMap<>();
-        response.put("mensaje", "Hemos enviado un correo con las instrucciones");
+        if (correoEnviado) {
+            response.put("mensaje", "Hemos enviado un correo con las instrucciones");
+        } else {
+            response.put("mensaje", "Modo Demo - Código para recuperar tu cuenta: " + tokenGenerado);
+        }
 
 
         System.out.println("==================================================");
@@ -318,9 +353,18 @@ public class UsuarioController {
         usuario.setToken(token);
         usuarioRepository.save(usuario);
 
-        emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
+        boolean correoEnviado = true;
+        try {
+            emailService.enviarEmailEliminarCuenta(usuario.getNombre(), usuario.getEmail(), token);
+        } catch (Exception e) {
+            correoEnviado = false;
+        }
 
-        return ResponseEntity.ok(new MessageResponse("Hemos enviado un código a tu correo para confirmar la eliminación"));
+        String msg = correoEnviado 
+            ? "Hemos enviado un código a tu correo para confirmar la eliminación"
+            : "Modo Demo - Código para eliminar tu cuenta: " + token;
+
+        return ResponseEntity.ok(new MessageResponse(msg));
     }
 
     // ============ CONFIRMAR ELIMINAR CUENTA ============

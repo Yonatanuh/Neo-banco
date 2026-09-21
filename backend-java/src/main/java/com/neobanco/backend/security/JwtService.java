@@ -8,10 +8,25 @@ import org.springframework.stereotype.Service;
 import java.security.Key;
 import java.util.Date;
 
+import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class JwtService {
-    // using a static key for development so tokens survive restarts
-    private static final Key SECRET_KEY = Keys.hmacShaKeyFor("NEOBANCO_SUPER_SECRET_KEY_FOR_JWT_SECURITY_2026".getBytes());
+    
+    @Value("${jwt.secret}")
+    private String secretKeyString;
+
+    private Key SECRET_KEY;
+
+    @PostConstruct
+    public void init() {
+        if (secretKeyString == null || secretKeyString.isBlank() || secretKeyString.equals("${JWT_SECRET}")) {
+            // Fallback for local development if env var is missing
+            secretKeyString = "NEOBANCO_SUPER_SECRET_KEY_FOR_JWT_SECURITY_2026"; 
+        }
+        SECRET_KEY = Keys.hmacShaKeyFor(secretKeyString.getBytes());
+    }
 
     public String generateToken(String userId) {
         long expirationTime = 1000 * 60 * 60 * 2; // 2 hours
