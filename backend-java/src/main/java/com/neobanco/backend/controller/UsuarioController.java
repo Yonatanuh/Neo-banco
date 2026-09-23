@@ -161,10 +161,11 @@ public class UsuarioController {
 
         Map<String, String> response = new HashMap<>();
         if (correoEnviado) {
-            response.put("mensaje", "Usuario creado. Revisa tu correo para verificar tu cuenta.");
+            response.put("mensaje", "Usuario creado. Revisa tu correo (y la carpeta de Spam) para tu código.");
         } else {
-            response.put("mensaje", "Usuario creado. (Modo Demo: Código de activación: " + usuarioGuardado.getToken() + ")");
+            response.put("mensaje", "Usuario creado. Código de activación: " + usuarioGuardado.getToken());
         }
+        response.put("token", usuarioGuardado.getToken());
 
         System.out.println("==================================================");
         System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
@@ -196,6 +197,43 @@ public class UsuarioController {
         usuario.setToken("");
         usuarioRepository.save(usuario);
         return ResponseEntity.ok(new MessageResponse("Usuario Confirmado Correctamente"));
+    }
+
+    // ============ REENVIAR CODIGO ============
+
+    @PostMapping("/reenviar-codigo")
+    public ResponseEntity<?> reenviarCodigo(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("El correo es obligatorio"));
+        }
+
+        Optional<Usuario> usuarioOpt = usuarioRepository.findByEmail(email.toLowerCase().trim());
+        if (usuarioOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("No existe un usuario con este correo"));
+        }
+
+        Usuario usuario = usuarioOpt.get();
+        if (usuario.getConfirmado() != null && usuario.getConfirmado()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Esta cuenta ya está confirmada"));
+        }
+
+        String nuevoToken = generarCodigo();
+        usuario.setToken(nuevoToken);
+        usuarioRepository.save(usuario);
+
+        boolean enviado = true;
+        try {
+            emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), nuevoToken);
+        } catch (Exception e) {
+            enviado = false;
+        }
+
+        String msg = enviado 
+            ? "Código reenviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y Spam."
+            : "Modo Demo - Tu código de activación es: " + nuevoToken;
+
+        return ResponseEntity.ok(Map.of("mensaje", msg, "token", nuevoToken));
     }
 
     // ============ PING (DESPERTADOR) ============

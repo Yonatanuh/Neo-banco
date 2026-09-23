@@ -27,10 +27,10 @@ const OlvidePassword = () => {
       setAlerta({ error: false, msg: data.mensaje });
       setEmail("");
 
-      // Redirigir a la vista del PIN después de 1 segundo
+      // Redirigir a la vista del PIN después de 2.5 segundos
       setTimeout(() => {
         navigate("/nuevo-password");
-      }, 1000);
+      }, 2500);
     } catch (error) {
       setAlerta({
         error: true,

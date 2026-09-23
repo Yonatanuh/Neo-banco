@@ -31,6 +31,7 @@ public class SecurityConfig {
                     "/api/usuarios/registro", 
                     "/api/usuarios/login", 
                     "/api/usuarios/confirmar", 
+                    "/api/usuarios/reenviar-codigo",
                     "/api/usuarios/olvide-password", 
                     "/api/usuarios/nuevo-password",
                     "/api/usuarios/ping",

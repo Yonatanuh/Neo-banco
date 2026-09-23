@@ -55,15 +55,17 @@ const Registrar = () => {
         password,
       });
 
+      localStorage.setItem("email_pendiente_confirmacion", email);
+
       setAlerta({
         error: false,
-        msg: "Cuenta creada. Revisa tu correo y serás redirigido para verificarla...",
+        msg: data.mensaje || "Cuenta creada. Revisa tu correo (y Spam) para activarla...",
       });
 
-      // Redirigir a confirmar después de 3 segundos
+      // Redirigir a confirmar después de 2.5 segundos
       setTimeout(() => {
         navigate("/confirmar");
-      }, 3000);
+      }, 2500);
     } catch (error) {
       setAlerta({
         error: true,
