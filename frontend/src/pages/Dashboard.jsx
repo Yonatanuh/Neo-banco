@@ -1157,20 +1157,20 @@ const Dashboard = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Tarjetas */}
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white/5 border border-white/10 rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.12)] relative overflow-hidden group hover:border-cyan-500/30 transition-colors duration-500">
-                      <div className="flex justify-between items-center mb-6">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                         <h3 className="text-xl font-bold flex items-center gap-2 text-cyan-400">
                           <CreditCard /> Mis Tarjetas
                         </h3>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                           <button
                             onClick={crearBurnerCard}
-                            className="text-xs bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-400 hover:to-red-400 px-3 py-1.5 rounded-lg font-bold text-white shadow-lg transition-colors flex items-center gap-1"
+                            className="flex-1 sm:flex-none justify-center text-xs bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-400 hover:to-red-400 px-3 py-2 sm:py-1.5 rounded-lg font-bold text-white shadow-lg transition-colors flex items-center gap-1"
                           >
                             <Plus size={14} /> Burner Card
                           </button>
                           <button
                             onClick={generarTarjeta}
-                            className="text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-1.5 rounded-lg font-bold text-white shadow-lg transition-colors flex items-center gap-1"
+                            className="flex-1 sm:flex-none justify-center text-xs bg-fuchsia-600 hover:bg-fuchsia-500 px-3 py-2 sm:py-1.5 rounded-lg font-bold text-white shadow-lg transition-colors flex items-center gap-1"
                           >
                             <Plus size={14} /> Nueva Desechable
                           </button>
@@ -1182,24 +1182,24 @@ const Dashboard = () => {
                           tarjetas.map((tarjeta) => (
                             <div key={tarjeta._id}>
                               <div
-                                className={`relative w-full h-56 rounded-2xl p-6 flex flex-col justify-between shadow-2xl transition-all duration-500 ${tarjeta.isFrozen ? "bg-slate-800/80 opacity-60 grayscale" : tarjeta.tipo === "Desechable" ? "bg-gradient-to-tr from-rose-600 via-orange-600 to-amber-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]" : "bg-gradient-to-tr from-indigo-600 via-purple-600 to-fuchsia-600 shadow-[0_0_30px_rgba(168,85,247,0.4)]"}`}
+                                className={`relative w-full aspect-[1.586/1] sm:h-56 sm:aspect-auto rounded-2xl p-4 sm:p-6 flex flex-col justify-between shadow-2xl transition-all duration-500 ${tarjeta.isFrozen ? "bg-slate-800/80 opacity-60 grayscale" : tarjeta.tipo === "Desechable" ? "bg-gradient-to-tr from-rose-600 via-orange-600 to-amber-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]" : "bg-gradient-to-tr from-indigo-600 via-purple-600 to-fuchsia-600 shadow-[0_0_30px_rgba(168,85,247,0.4)]"}`}
                               >
                                 {tarjeta.isFrozen && (
                                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-2xl z-10 ">
-                                    <p className="text-rose-400 font-black text-2xl flex items-center gap-2 drop-shadow-md">
+                                    <p className="text-rose-400 font-black text-xl sm:text-2xl flex items-center gap-2 drop-shadow-md">
                                       <Lock /> CONGELADA
                                     </p>
                                   </div>
                                 )}
                                 <div className="flex justify-between items-center z-0">
-                                  <span className="text-xl font-black tracking-widest text-teal-100 flex flex-col">
+                                  <span className="text-lg sm:text-xl font-black tracking-wider sm:tracking-widest text-teal-100 flex flex-col">
                                     NEO BANCO
-                                    <span className="text-xs text-white/70 font-medium tracking-normal mt-1">
+                                    <span className="text-[10px] sm:text-xs text-white/70 font-medium tracking-normal mt-1">
                                       {tarjeta.tipo.toUpperCase()}
                                     </span>
                                   </span>
                                   <svg
-                                    className="w-12 h-12 text-cyan-200 opacity-50"
+                                    className="w-8 h-8 sm:w-12 sm:h-12 text-cyan-200 opacity-50"
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -1213,37 +1213,37 @@ const Dashboard = () => {
                                   </svg>
                                 </div>
 
-                                <div className="mt-4 z-0">
-                                  <p className="text-3xl font-mono tracking-[0.25em] drop-shadow-sm">
+                                <div className="mt-2 sm:mt-4 z-0">
+                                  <p className="text-lg xs:text-xl sm:text-2xl md:text-3xl font-mono tracking-widest sm:tracking-[0.2em] md:tracking-[0.25em] drop-shadow-sm text-white">
                                     {tarjeta.numero_tarjeta
                                       .match(/.{1,4}/g)
                                       .join(" ")}
                                   </p>
                                 </div>
 
-                                <div className="flex justify-between mt-4 z-0">
-                                  <div>
-                                    <p className="text-xs text-indigo-200 font-medium uppercase tracking-wider">
+                                <div className="flex justify-between items-end mt-2 sm:mt-4 z-0">
+                                  <div className="truncate pr-2">
+                                    <p className="text-[10px] sm:text-xs text-indigo-200 font-medium uppercase tracking-wider">
                                       Titular
                                     </p>
-                                    <p className="font-bold text-lg tracking-wide uppercase drop-shadow-sm text-white">
+                                    <p className="font-bold text-sm sm:text-lg tracking-wide uppercase drop-shadow-sm text-white truncate max-w-[120px] sm:max-w-[200px]">
                                       {auth.nombre}
                                     </p>
                                   </div>
-                                  <div className="text-right flex gap-6">
+                                  <div className="text-right flex gap-3 sm:gap-6">
                                     <div>
-                                      <p className="text-xs text-indigo-200 font-medium uppercase tracking-wider">
+                                      <p className="text-[10px] sm:text-xs text-indigo-200 font-medium uppercase tracking-wider">
                                         Vence
                                       </p>
-                                      <p className="font-bold text-lg drop-shadow-sm text-white">
+                                      <p className="font-bold text-sm sm:text-lg drop-shadow-sm text-white">
                                         {tarjeta.fecha_expiracion}
                                       </p>
                                     </div>
                                     <div>
-                                      <p className="text-xs text-indigo-200 font-medium uppercase tracking-wider">
+                                      <p className="text-[10px] sm:text-xs text-indigo-200 font-medium uppercase tracking-wider">
                                         CVV
                                       </p>
-                                      <p className="font-bold text-lg drop-shadow-sm text-white">
+                                      <p className="font-bold text-sm sm:text-lg drop-shadow-sm text-white">
                                         {tarjeta.cvv}
                                       </p>
                                     </div>
@@ -1449,15 +1449,15 @@ const Dashboard = () => {
 
               {/* VISTA: TRANSFERENCIAS */}
               {opcionActiva === "transferir" && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white/5 border border-white/10 rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.12)] max-w-2xl mx-auto">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-2xl font-bold text-cyan-300 flex items-center gap-3">
-                      <Send /> Transferencias
+                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.12)] max-w-2xl mx-auto">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                    <h3 className="text-xl sm:text-2xl font-bold text-cyan-300 flex items-center gap-3">
+                      <Send className="w-5 h-5 sm:w-6 sm:h-6" /> Transferencias
                     </h3>
                     <button
                       type="button"
                       onClick={() => setScanMode(!scanMode)}
-                      className="text-sm bg-cyan-900/40 text-cyan-300 px-4 py-2 rounded-lg font-bold border border-cyan-500/30 hover:bg-cyan-500 hover:text-white transition-colors"
+                      className="w-full sm:w-auto text-sm bg-cyan-900/40 text-cyan-300 px-4 py-2 rounded-lg font-bold border border-cyan-500/30 hover:bg-cyan-500 hover:text-white transition-colors"
                     >
                       {scanMode ? "Ingreso Manual" : "Escanear / Mostrar QR"}
                     </button>
