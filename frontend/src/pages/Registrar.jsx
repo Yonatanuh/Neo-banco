@@ -59,10 +59,9 @@ const Registrar = () => {
 
       setAlerta({
         error: false,
-        msg: data.mensaje || "Cuenta creada. Revisa tu correo (y Spam) para activarla...",
+        msg: data.mensaje || "Cuenta creada. Redirigiendo a verificación...",
       });
 
-      // Redirigir a confirmar después de 2.5 segundos
       setTimeout(() => {
         navigate("/confirmar");
       }, 2500);
@@ -73,14 +72,13 @@ const Registrar = () => {
       });
 
       if (error.response?.data?.unconfirmed) {
+        localStorage.setItem("email_pendiente_confirmacion", email);
         setTimeout(() => {
           navigate("/confirmar");
         }, 3000);
       }
     } finally {
-      if (!alerta.error && !alerta.msg.includes("Cuenta creada")) {
-        setCargando(false);
-      }
+      setCargando(false);
     }
   };
 

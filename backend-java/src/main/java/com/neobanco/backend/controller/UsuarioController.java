@@ -107,9 +107,9 @@ public class UsuarioController {
                 
                 Map<String, Object> response = new HashMap<>();
                 if (correoEnviado) {
-                    response.put("mensaje", "Tu cuenta ya existe pero no está confirmada. Te hemos reenviado el código al correo.");
+                    response.put("mensaje", "Tu cuenta aún no ha sido verificada. Te hemos reenviado un nuevo código a tu correo.");
                 } else {
-                    response.put("mensaje", "Modo Demo - Cuenta no confirmada. Usa este código: " + existeUsuario.getToken());
+                    response.put("mensaje", "Tu cuenta aún no ha sido verificada. Hubo un problema al enviar el correo. Intenta de nuevo.");
                 }
                 response.put("require2FA", true);
 
@@ -161,11 +161,10 @@ public class UsuarioController {
 
         Map<String, String> response = new HashMap<>();
         if (correoEnviado) {
-            response.put("mensaje", "Usuario creado. Revisa tu correo (y la carpeta de Spam) para tu código.");
+            response.put("mensaje", "Cuenta creada correctamente. Revisa tu correo electrónico para obtener el código de verificación.");
         } else {
-            response.put("mensaje", "Usuario creado. Código de activación: " + usuarioGuardado.getToken());
+            response.put("mensaje", "Cuenta creada. Hubo un problema al enviar el correo. Usa el botón de reenvío en la siguiente pantalla.");
         }
-        response.put("token", usuarioGuardado.getToken());
 
         System.out.println("==================================================");
         System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
@@ -230,10 +229,10 @@ public class UsuarioController {
         }
 
         String msg = enviado 
-            ? "Código reenviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y Spam."
-            : "Modo Demo - Tu código de activación es: " + nuevoToken;
+            ? "Nuevo código enviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y la carpeta de Spam."
+            : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
-        return ResponseEntity.ok(Map.of("mensaje", msg, "token", nuevoToken));
+        return ResponseEntity.ok(Map.of("mensaje", msg));
     }
 
     // ============ PING (DESPERTADOR) ============
@@ -271,8 +270,8 @@ public class UsuarioController {
             }
             
             String msg = correoEnviado 
-                ? "Tu cuenta no ha sido confirmada. Te hemos enviado un nuevo código al correo."
-                : "Modo Demo - Tu nuevo código de activación es: " + usuario.getToken();
+                ? "Tu cuenta no ha sido verificada. Te hemos enviado un nuevo código a tu correo."
+                : "Tu cuenta no ha sido verificada. No fue posible enviar el correo. Intenta de nuevo.";
             
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse(msg, true));
         }
@@ -336,9 +335,9 @@ public class UsuarioController {
 
         Map<String, String> response = new HashMap<>();
         if (correoEnviado) {
-            response.put("mensaje", "Hemos enviado un correo con las instrucciones");
+            response.put("mensaje", "Te hemos enviado un código de recuperación a tu correo electrónico.");
         } else {
-            response.put("mensaje", "Modo Demo - Código para recuperar tu cuenta: " + tokenGenerado);
+            response.put("mensaje", "No fue posible enviar el correo. Intenta de nuevo en unos segundos.");
         }
 
 
@@ -399,8 +398,8 @@ public class UsuarioController {
         }
 
         String msg = correoEnviado 
-            ? "Hemos enviado un código a tu correo para confirmar la eliminación"
-            : "Modo Demo - Código para eliminar tu cuenta: " + token;
+            ? "Te hemos enviado un código de confirmación a tu correo electrónico."
+            : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
         return ResponseEntity.ok(new MessageResponse(msg));
     }
