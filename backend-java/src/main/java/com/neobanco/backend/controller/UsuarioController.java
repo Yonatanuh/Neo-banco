@@ -624,7 +624,16 @@ public class UsuarioController {
         usuarioRepository.save(usuarioOrigen);
         usuarioRepository.save(usuarioDestino);
 
-        return ResponseEntity.ok(Map.of("mensaje", "Transferencia exitosa", "saldo", usuarioOrigen.getSaldo()));
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("mensaje", "Transferencia exitosa");
+        resp.put("saldo", usuarioOrigen.getSaldo());
+        resp.put("transaccionId", transaccion.getId());
+        resp.put("monto", request.getMonto());
+        resp.put("destinatario", usuarioDestino.getNombre());
+        resp.put("emailDestino", usuarioDestino.getEmail());
+        resp.put("fecha", transaccion.getFecha());
+
+        return ResponseEntity.ok(resp);
     }
 
     // ============ HISTORIAL ============

@@ -35,6 +35,8 @@ import {
   Menu,
   X,
   Loader2,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -84,6 +86,7 @@ const Dashboard = () => {
   const [mensaje, setMensaje] = useState({ tipo: "", texto: "" });
   const [montoInversion, setMontoInversion] = useState("");
   const [scanMode, setScanMode] = useState(false);
+  const [comprobanteTransferencia, setComprobanteTransferencia] = useState(null);
   const [suscripciones, setSuscripciones] = useState({
     detectadas: [],
     guardadas: [],
@@ -283,6 +286,94 @@ const Dashboard = () => {
     }
   };
 
+  const descargarComprobante = (recibo) => {
+    if (!recibo) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Por favor permite las ventanas emergentes (pop-ups) para descargar el comprobante");
+      return;
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Comprobante de Transferencia - Neo Banco</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #0f172a; background: #ffffff; }
+            .receipt { max-width: 440px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 20px; padding: 32px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+            .header { text-align: center; border-bottom: 2px dashed #e2e8f0; padding-bottom: 20px; margin-bottom: 24px; }
+            .logo { font-size: 26px; font-weight: 900; color: #0891b2; letter-spacing: -0.5px; }
+            .badge { display: inline-block; background: #ecfdf5; color: #059669; font-size: 11px; font-weight: 800; padding: 4px 14px; border-radius: 9999px; margin-top: 8px; letter-spacing: 0.5px; }
+            .amount-card { text-align: center; margin: 20px 0; background: #f8fafc; padding: 20px; border-radius: 14px; border: 1px solid #f1f5f9; }
+            .amount-label { font-size: 12px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+            .amount { font-size: 34px; font-weight: 900; color: #0f172a; }
+            .details { margin: 20px 0; }
+            .row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #f8fafc; font-size: 13.5px; }
+            .row:last-child { border-bottom: none; }
+            .label { color: #64748b; }
+            .val { font-weight: 700; color: #1e293b; text-align: right; }
+            .footer { text-align: center; margin-top: 28px; padding-top: 18px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #94a3b8; line-height: 1.5; }
+            @media print {
+              body { padding: 0; background: #fff; }
+              .receipt { border: none; box-shadow: none; padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">
+            <div class="header">
+              <div class="logo">NEO BANCO</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 500;">Comprobante Oficial de Transferencia</div>
+              <div class="badge">TRANSACCIÓN COMPLETADA</div>
+            </div>
+            <div class="amount-card">
+              <div class="amount-label">Monto Transferido</div>
+              <div class="amount">$${Number(recibo.monto).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</div>
+            </div>
+            <div class="details">
+              <div class="row">
+                <span class="label">ID Transacción</span>
+                <span class="val" style="font-family: monospace; font-size: 12px;">${recibo.transaccionId}</span>
+              </div>
+              <div class="row">
+                <span class="label">Destinatario</span>
+                <span class="val">${recibo.destinatario}</span>
+              </div>
+              <div class="row">
+                <span class="label">Correo Destino</span>
+                <span class="val">${recibo.emailDestino}</span>
+              </div>
+              <div class="row">
+                <span class="label">Emisor</span>
+                <span class="val">${recibo.remitente}</span>
+              </div>
+              <div class="row">
+                <span class="label">Fecha y Hora</span>
+                <span class="val">${recibo.fecha}</span>
+              </div>
+              <div class="row">
+                <span class="label">Método</span>
+                <span class="val">Transferencia Inmediata</span>
+              </div>
+            </div>
+            <div class="footer">
+              Comprobante digital válido emitido por Neo Banco.<br />
+              Operación autorizada y registrada en el sistema.
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const procesarTransferencia = async (e) => {
     e.preventDefault();
     setMensaje({ tipo: "", texto: "" });
@@ -300,6 +391,16 @@ const Dashboard = () => {
       });
       setMensaje({ tipo: "exito", texto: data.mensaje });
       setAuth({ ...auth, saldo: data.saldo });
+
+      setComprobanteTransferencia({
+        transaccionId: data.transaccionId || `TX-${Date.now().toString().slice(-8)}`,
+        monto: montoTransfer,
+        destinatario: data.destinatario || emailDestino,
+        emailDestino: emailDestino,
+        remitente: auth?.nombre || "Usuario",
+        fecha: new Date().toLocaleString(),
+      });
+
       setMontoTransfer("");
       setEmailDestino("");
       cargarDatosBase(); // Refrescar historial
@@ -1464,52 +1565,111 @@ const Dashboard = () => {
                   </div>
 
                   {!scanMode ? (
-                    <form onSubmit={procesarTransferencia}>
-                      <div className="mb-6">
-                        <label className="block text-slate-400 mb-2 font-semibold">
-                          Destinatario (Correo)
-                        </label>
-                        <input
-                          type="email"
-                          value={emailDestino}
-                          onChange={(e) => setEmailDestino(e.target.value)}
-                          className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-                          placeholder="usuario@gmail.com"
-                          list="contactos-list"
-                        />
-                        <datalist id="contactos-list">
-                          {contactos.map((c) => (
-                            <option key={c._id} value={c.email_contacto}>
-                              {c.alias}
-                            </option>
-                          ))}
-                        </datalist>
-                        <p className="text-xs text-slate-500 mt-2">
-                          Puedes seleccionar un contacto frecuente o escribir un
-                          nuevo correo.
+                    comprobanteTransferencia ? (
+                      <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 text-center animate-in zoom-in-95 duration-300">
+                        <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                        </div>
+                        <h4 className="text-xl font-bold text-white mb-1">
+                          ¡Transferencia Exitosa!
+                        </h4>
+                        <p className="text-sm text-slate-400 mb-5">
+                          La transferencia se procesó de forma segura e inmediata.
                         </p>
+
+                        <div className="bg-black/40 border border-white/10 rounded-xl p-4 mb-6 text-left space-y-3">
+                          <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2.5">
+                            <span className="text-slate-400">Monto Transferido:</span>
+                            <span className="text-lg font-bold text-emerald-400 font-mono">
+                              ${Number(comprobanteTransferencia.monto).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm border-b border-white/5 pb-2.5">
+                            <span className="text-slate-400">Destinatario:</span>
+                            <span className="font-semibold text-white">
+                              {comprobanteTransferencia.destinatario}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm border-b border-white/5 pb-2.5">
+                            <span className="text-slate-400">Correo Destino:</span>
+                            <span className="text-slate-300">
+                              {comprobanteTransferencia.emailDestino}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">ID Operación:</span>
+                            <span className="text-xs font-mono text-cyan-400">
+                              {comprobanteTransferencia.transaccionId}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button
+                            type="button"
+                            onClick={() => descargarComprobante(comprobanteTransferencia)}
+                            className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-bold py-3.5 px-4 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
+                          >
+                            <FileText className="w-4 h-4" />
+                            Descargar Comprobante (PDF)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setComprobanteTransferencia(null)}
+                            className="flex-1 bg-white/10 hover:bg-white/15 text-white font-semibold py-3.5 px-4 rounded-xl transition-all cursor-pointer text-sm"
+                          >
+                            Nueva Transferencia
+                          </button>
+                        </div>
                       </div>
-                      <div className="mb-8">
-                        <label className="block text-slate-400 mb-2 font-semibold">
-                          Monto a transferir ($)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="1"
-                          value={montoTransfer}
-                          onChange={(e) => setMontoTransfer(e.target.value)}
-                          className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-2xl text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-                          placeholder="0.00"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 shadow-[0_0_15px_rgba(6,182,212,0.5)] border border-cyan-400/30 text-white font-bold py-4 rounded-lg shadow-lg shadow-teal-900/50 transition-all text-lg"
-                      >
-                        Confirmar Transferencia
-                      </button>
-                    </form>
+                    ) : (
+                      <form onSubmit={procesarTransferencia}>
+                        <div className="mb-6">
+                          <label className="block text-slate-400 mb-2 font-semibold">
+                            Destinatario (Correo)
+                          </label>
+                          <input
+                            type="email"
+                            value={emailDestino}
+                            onChange={(e) => setEmailDestino(e.target.value)}
+                            className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                            placeholder="usuario@gmail.com"
+                            list="contactos-list"
+                          />
+                          <datalist id="contactos-list">
+                            {contactos.map((c) => (
+                              <option key={c._id} value={c.email_contacto}>
+                                {c.alias}
+                              </option>
+                            ))}
+                          </datalist>
+                          <p className="text-xs text-slate-500 mt-2">
+                            Puedes seleccionar un contacto frecuente o escribir un
+                            nuevo correo.
+                          </p>
+                        </div>
+                        <div className="mb-8">
+                          <label className="block text-slate-400 mb-2 font-semibold">
+                            Monto a transferir ($)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="1"
+                            value={montoTransfer}
+                            onChange={(e) => setMontoTransfer(e.target.value)}
+                            className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-2xl text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 shadow-[0_0_15px_rgba(6,182,212,0.5)] border border-cyan-400/30 text-white font-bold py-4 rounded-lg shadow-lg shadow-teal-900/50 transition-all text-lg"
+                        >
+                          Confirmar Transferencia
+                        </button>
+                      </form>
+                    )
                   ) : (
                     <div className="flex flex-col md:flex-row gap-8">
                       {/* Mi Código QR */}
