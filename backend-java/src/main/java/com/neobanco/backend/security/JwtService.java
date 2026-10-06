@@ -22,8 +22,13 @@ public class JwtService {
     @PostConstruct
     public void init() {
         if (secretKeyString == null || secretKeyString.isBlank() || secretKeyString.equals("${JWT_SECRET}")) {
-            // Fallback for local development if env var is missing
-            secretKeyString = "NEOBANCO_SUPER_SECRET_KEY_FOR_JWT_SECURITY_2026"; 
+            // SECURITY FIX: Nunca usar contraseñas quemadas/hardcodeadas. 
+            // Si falta la variable de entorno, generamos una clave aleatoria segura para este ciclo de vida.
+            // En producción, si reinician el server, las sesiones caducarán (forzando a configurar JWT_SECRET).
+            byte[] randomBytes = new byte[32];
+            new java.security.SecureRandom().nextBytes(randomBytes);
+            secretKeyString = java.util.Base64.getEncoder().encodeToString(randomBytes);
+            System.err.println("⚠️ ATENCIÓN: No se detectó la variable JWT_SECRET. Se ha generado una clave JWT aleatoria por seguridad.");
         }
         SECRET_KEY = Keys.hmacShaKeyFor(secretKeyString.getBytes());
     }
