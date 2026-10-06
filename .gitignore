@@ -10,9 +10,19 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 
+# Variables de Entorno (Globales)
+.env
+.env.*
+*.local
+
 # IDEs y SO
 .vscode/
 .idea/
 *.DS_Store
 Thumbs.db
+
+# Archivos Temporales
+temp.js
+find.js
+*.log
 

@@ -14,8 +14,10 @@ import java.util.Map;
 @Service
 public class EmailService {
 
-    // URL de tu Webhook de Google Apps Script
-    private final String GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbys7Zf_8iYrUArMpFPda38k3195skCnkOQFql5J-_felVM207KEsOVk_AQMU6UW7uOO/exec";
+    // URL de tu Webhook de Google Apps Script inyectada desde application.properties (o .env)
+    @org.springframework.beans.factory.annotation.Value("${google.script.url}")
+    private String GOOGLE_SCRIPT_URL;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public void enviarEmailRegistro(String nombre, String email, String token) {
