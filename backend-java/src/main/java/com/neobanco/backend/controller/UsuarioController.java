@@ -32,6 +32,7 @@ public class UsuarioController {
     private final JwtService jwtService;
     private final BCryptPasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final com.neobanco.backend.service.LoginAttemptService loginAttemptService;
 
     @Autowired
     public UsuarioController(UsuarioRepository usuarioRepository,
@@ -39,13 +40,15 @@ public class UsuarioController {
                              TransaccionRepository transaccionRepository,
                              MetaAhorroRepository metaAhorroRepository,
                              JwtService jwtService,
-                             EmailService emailService) {
+                             EmailService emailService,
+                             com.neobanco.backend.service.LoginAttemptService loginAttemptService) {
         this.usuarioRepository = usuarioRepository;
         this.tarjetaRepository = tarjetaRepository;
         this.transaccionRepository = transaccionRepository;
         this.metaAhorroRepository = metaAhorroRepository;
         this.jwtService = jwtService;
         this.emailService = emailService;
+        this.loginAttemptService = loginAttemptService;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -83,10 +86,10 @@ public class UsuarioController {
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@RequestBody RegistroRequest request) {
         if (request.getNombre() == null || request.getEmail() == null || request.getPassword() == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Nombre, email y contraseña son obligatorios"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Nombre, email y contraseÃ±a son obligatorios"));
         }
         if (request.getPassword().length() < 8) {
-            return ResponseEntity.badRequest().body(new MessageResponse("La contraseña debe tener al menos 8 caracteres"));
+            return ResponseEntity.badRequest().body(new MessageResponse("La contraseÃ±a debe tener al menos 8 caracteres"));
         }
 
         String emailLower = request.getEmail().toLowerCase();
@@ -107,9 +110,9 @@ public class UsuarioController {
                 
                 Map<String, Object> response = new HashMap<>();
                 if (correoEnviado) {
-                    response.put("mensaje", "Tu cuenta aún no ha sido verificada. Te hemos reenviado un nuevo código a tu correo.");
+                    response.put("mensaje", "Tu cuenta aÃºn no ha sido verificada. Te hemos reenviado un nuevo cÃ³digo a tu correo.");
                 } else {
-                    response.put("mensaje", "Tu cuenta aún no ha sido verificada. Hubo un problema al enviar el correo. Intenta de nuevo.");
+                    response.put("mensaje", "Tu cuenta aÃºn no ha sido verificada. Hubo un problema al enviar el correo. Intenta de nuevo.");
                 }
                 response.put("require2FA", true);
 
@@ -120,7 +123,7 @@ public class UsuarioController {
                 
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
             }
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(new MessageResponse("El correo ya está registrado"));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new MessageResponse("El correo ya estÃ¡ registrado"));
         }
 
         Usuario nuevoUsuario = new Usuario();
@@ -155,15 +158,15 @@ public class UsuarioController {
         try {
             emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
         } catch (Exception e) {
-            System.err.println("Error enviando correo (posible límite de Sandbox de Resend): " + e.getMessage());
+            System.err.println("Error enviando correo (posible lÃ­mite de Sandbox de Resend): " + e.getMessage());
             correoEnviado = false;
         }
 
         Map<String, String> response = new HashMap<>();
         if (correoEnviado) {
-            response.put("mensaje", "Cuenta creada correctamente. Revisa tu correo electrónico para obtener el código de verificación.");
+            response.put("mensaje", "Cuenta creada correctamente. Revisa tu correo electrÃ³nico para obtener el cÃ³digo de verificaciÃ³n.");
         } else {
-            response.put("mensaje", "Cuenta creada. Hubo un problema al enviar el correo. Usa el botón de reenvío en la siguiente pantalla.");
+            response.put("mensaje", "Cuenta creada. Hubo un problema al enviar el correo. Usa el botÃ³n de reenvÃ­o en la siguiente pantalla.");
         }
 
         System.out.println("==================================================");
@@ -188,7 +191,7 @@ public class UsuarioController {
 
         if (usuarioOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new MessageResponse("Código no válido o ya fue utilizado"));
+                    .body(new MessageResponse("CÃ³digo no vÃ¡lido o ya fue utilizado"));
         }
 
         Usuario usuario = usuarioOpt.get();
@@ -214,7 +217,7 @@ public class UsuarioController {
 
         Usuario usuario = usuarioOpt.get();
         if (usuario.getConfirmado() != null && usuario.getConfirmado()) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Esta cuenta ya está confirmada"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Esta cuenta ya estÃ¡ confirmada"));
         }
 
         String nuevoToken = generarCodigo();
@@ -229,7 +232,7 @@ public class UsuarioController {
         }
 
         String msg = enviado 
-            ? "Nuevo código enviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y la carpeta de Spam."
+            ? "Nuevo cÃ³digo enviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y la carpeta de Spam."
             : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
         return ResponseEntity.ok(Map.of("mensaje", msg));
@@ -246,20 +249,28 @@ public class UsuarioController {
     @PostMapping("/login")
     public ResponseEntity<?> autenticarUsuario(@RequestBody LoginRequest request) {
         if (request.getEmail() == null || request.getPassword() == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Email y contraseña son obligatorios"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Email y contraseÃ±a son obligatorios"));
         }
 
         String emailLower = request.getEmail().toLowerCase();
+
+        if (loginAttemptService.isBlocked(emailLower)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(new MessageResponse("Demasiados intentos fallidos. Tu cuenta ha sido bloqueada temporalmente por 15 minutos por seguridad."));
+        }
+
         Optional<Usuario> usuarioOpt = usuarioRepository.findByEmail(emailLower);
 
         if (usuarioOpt.isEmpty() || !passwordEncoder.matches(request.getPassword(), usuarioOpt.get().getPassword())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Email o contraseña incorrectos"));
+            loginAttemptService.loginFailed(emailLower);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Email o contraseÃ±a incorrectos"));
         }
 
+        loginAttemptService.loginSucceeded(emailLower);
         Usuario usuario = usuarioOpt.get();
 
         if (!usuario.getConfirmado()) {
-            // Generar nuevo código y reenviar correo si la cuenta no está confirmada
+            // Generar nuevo cÃ³digo y reenviar correo si la cuenta no estÃ¡ confirmada
             usuario.setToken(generarCodigo());
             usuarioRepository.save(usuario);
             boolean correoEnviado = true;
@@ -270,7 +281,7 @@ public class UsuarioController {
             }
             
             String msg = correoEnviado 
-                ? "Tu cuenta no ha sido verificada. Te hemos enviado un nuevo código a tu correo."
+                ? "Tu cuenta no ha sido verificada. Te hemos enviado un nuevo cÃ³digo a tu correo."
                 : "Tu cuenta no ha sido verificada. No fue posible enviar el correo. Intenta de nuevo.";
             
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse(msg, true));
@@ -285,7 +296,7 @@ public class UsuarioController {
                 return ResponseEntity.ok(Map.of(
                         "require2FA", true,
                         "usuarioId", usuario.getId(),
-                        "mensaje", "Se requiere código 2FA"
+                        "mensaje", "Se requiere cÃ³digo 2FA"
                 ));
             }
         }
@@ -335,7 +346,7 @@ public class UsuarioController {
 
         Map<String, String> response = new HashMap<>();
         if (correoEnviado) {
-            response.put("mensaje", "Te hemos enviado un código de recuperación a tu correo electrónico.");
+            response.put("mensaje", "Te hemos enviado un cÃ³digo de recuperaciÃ³n a tu correo electrÃ³nico.");
         } else {
             response.put("mensaje", "No fue posible enviar el correo. Intenta de nuevo en unos segundos.");
         }
@@ -356,10 +367,10 @@ public class UsuarioController {
         String password = body.get("password");
 
         if (token == null || password == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Token y contraseña son requeridos"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Token y contraseÃ±a son requeridos"));
         }
         if (password.length() < 8) {
-            return ResponseEntity.badRequest().body(new MessageResponse("La contraseña debe tener al menos 8 caracteres"));
+            return ResponseEntity.badRequest().body(new MessageResponse("La contraseÃ±a debe tener al menos 8 caracteres"));
         }
 
         Optional<Usuario> usuarioOpt = usuarioRepository.findAll().stream()
@@ -367,7 +378,7 @@ public class UsuarioController {
                 .findFirst();
 
         if (usuarioOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Token no válido"));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Token no vÃ¡lido"));
         }
 
         Usuario usuario = usuarioOpt.get();
@@ -375,7 +386,7 @@ public class UsuarioController {
         usuario.setToken("");
         usuario.setConfirmado(true); // Auto-confirmar si prueban que tienen el correo
         usuarioRepository.save(usuario);
-        return ResponseEntity.ok(new MessageResponse("Contraseña modificada correctamente"));
+        return ResponseEntity.ok(new MessageResponse("ContraseÃ±a modificada correctamente"));
     }
 
     // ============ SOLICITAR ELIMINAR CUENTA ============
@@ -398,7 +409,7 @@ public class UsuarioController {
         }
 
         String msg = correoEnviado 
-            ? "Te hemos enviado un código de confirmación a tu correo electrónico."
+            ? "Te hemos enviado un cÃ³digo de confirmaciÃ³n a tu correo electrÃ³nico."
             : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
         return ResponseEntity.ok(new MessageResponse(msg));
@@ -414,7 +425,7 @@ public class UsuarioController {
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
 
         if (!token.equals(usuario.getToken())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("El código es incorrecto"));
+            return ResponseEntity.badRequest().body(new MessageResponse("El cÃ³digo es incorrecto"));
         }
 
         // Soft delete
@@ -453,7 +464,7 @@ public class UsuarioController {
     public ResponseEntity<?> depositar(@RequestBody MontoRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
         if (request.getMonto() == null || request.getMonto() <= 0) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Monto no válido"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Monto no vÃ¡lido"));
         }
 
         Usuario usuario = usuarioRepository.findById(authUser.getId()).orElse(null);
@@ -465,12 +476,12 @@ public class UsuarioController {
         Transaccion transaccion = new Transaccion();
         transaccion.setRemitenteId(usuario.getId());
         transaccion.setMonto(request.getMonto());
-        transaccion.setTipo("Depósito");
+        transaccion.setTipo("DepÃ³sito");
         transaccion.setCategoria("Otro");
         transaccion.setFecha(new Date());
         transaccionRepository.save(transaccion);
 
-        return ResponseEntity.ok(Map.of("mensaje", "Depósito exitoso", "saldo", usuario.getSaldo()));
+        return ResponseEntity.ok(Map.of("mensaje", "DepÃ³sito exitoso", "saldo", usuario.getSaldo()));
     }
 
     // ============ RETIRAR ============
@@ -479,7 +490,7 @@ public class UsuarioController {
     public ResponseEntity<?> retirar(@RequestBody MontoRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
         if (request.getMonto() == null || request.getMonto() <= 0) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Monto no válido"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Monto no vÃ¡lido"));
         }
 
         Usuario usuario = usuarioRepository.findById(authUser.getId()).orElse(null);
@@ -491,7 +502,7 @@ public class UsuarioController {
 
         usuario.setSaldo(usuario.getSaldo() - request.getMonto());
 
-        // Ahorro automático por redondeo
+        // Ahorro automÃ¡tico por redondeo
         if (usuario.getRedondeoActivo() != null && usuario.getRedondeoActivo() && usuario.getMetaRedondeoId() != null) {
             double fraccion = request.getMonto() % 1;
             if (fraccion > 0) {
@@ -536,7 +547,7 @@ public class UsuarioController {
     public ResponseEntity<?> transferir(@RequestBody TransferenciaRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
         if (request.getMonto() == null || request.getMonto() <= 0 || request.getEmailDestino() == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Datos no válidos"));
+            return ResponseEntity.badRequest().body(new MessageResponse("Datos no vÃ¡lidos"));
         }
 
         Usuario usuarioOrigen = usuarioRepository.findById(authUser.getId()).orElse(null);
@@ -553,7 +564,7 @@ public class UsuarioController {
                 return ResponseEntity.badRequest().body(new MessageResponse("Saldo insuficiente y no tienes sobregiro activo"));
             }
             if (nuevoSaldo < -500) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Saldo insuficiente. El límite de sobregiro es -$500"));
+                return ResponseEntity.badRequest().body(new MessageResponse("Saldo insuficiente. El lÃ­mite de sobregiro es -$500"));
             }
             if (usuarioOrigen.getSaldo() >= 0 && nuevoSaldo < 0) {
                 cobrarFee = true;
@@ -570,7 +581,7 @@ public class UsuarioController {
         usuarioOrigen.setSaldo(usuarioOrigen.getSaldo() - request.getMonto());
         usuarioDestino.setSaldo(usuarioDestino.getSaldo() + request.getMonto());
 
-        // Transacción principal
+        // TransacciÃ³n principal
         Transaccion transaccion = new Transaccion();
         transaccion.setRemitenteId(usuarioOrigen.getId());
         transaccion.setDestinatarioId(usuarioDestino.getId());
@@ -618,7 +629,7 @@ public class UsuarioController {
             }
         }
 
-        // Gamificación: +10 XP por transferencia
+        // GamificaciÃ³n: +10 XP por transferencia
         sumarXP(usuarioOrigen, 10);
 
         usuarioRepository.save(usuarioOrigen);
@@ -671,7 +682,7 @@ public class UsuarioController {
         usuarioRepository.save(usuario);
 
         return ResponseEntity.ok(Map.of(
-                "mensaje", "Configuración de redondeo actualizada",
+                "mensaje", "ConfiguraciÃ³n de redondeo actualizada",
                 "redondeoActivo", usuario.getRedondeoActivo()
         ));
     }
@@ -707,9 +718,10 @@ public class UsuarioController {
         transaccionRepository.save(tx);
 
         return ResponseEntity.ok(Map.of(
-                "mensaje", "¡Felicidades! Ahora eres NeoBanco Pro. Disfruta de beneficios exclusivos.",
+                "mensaje", "Â¡Felicidades! Ahora eres NeoBanco Pro. Disfruta de beneficios exclusivos.",
                 "esPremium", true,
                 "saldo", usuario.getSaldo()
         ));
     }
 }
+
