@@ -85,6 +85,7 @@ const Login = () => {
         });
 
         if (error.response?.data?.unconfirmed) {
+          localStorage.setItem("email_pendiente_confirmacion", email.trim());
           setTimeout(() => {
             navigate("/confirmar");
           }, 1000);

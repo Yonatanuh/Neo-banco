@@ -6,6 +6,7 @@ import clienteAxios from "../config/axios";
 
 const NuevoPassword = () => {
   const [token, setToken] = useState("");
+  const [email, setEmail] = useState(() => sessionStorage.getItem("email_recuperacion") || "");
   const [password, setPassword] = useState("");
   const [alerta, setAlerta] = useState({ error: false, msg: "" });
   const [cargando, setCargando] = useState(false);
@@ -23,7 +24,7 @@ const NuevoPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if ([token, password].includes("")) {
+    if ([email.trim(), token, password].includes("")) {
       setAlerta({ error: true, msg: "Todos los campos son obligatorios" });
       return;
     }
@@ -39,6 +40,7 @@ const NuevoPassword = () => {
     setCargando(true);
     try {
       const { data } = await clienteAxios.post("/usuarios/nuevo-password", {
+        email: email.trim(),
         token,
         password,
       });
@@ -48,6 +50,7 @@ const NuevoPassword = () => {
         msg: data.mensaje || "Contraseña modificada correctamente",
       });
       setModificado(true);
+      sessionStorage.removeItem("email_recuperacion");
       setTimeout(() => navigate("/"), 3000);
     } catch (error) {
       setAlerta({
@@ -127,6 +130,10 @@ const NuevoPassword = () => {
 
             {!modificado && (
               <>
+                <div className="space-y-1">
+                  <label htmlFor="recovery-email" className="text-sm font-medium text-slate-300 ml-1">Correo de tu cuenta</label>
+                  <input id="recovery-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} disabled={cargando} className="w-full p-3 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-cyan-400" />
+                </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-300 ml-1">
                     Código de Seguridad (Token)

@@ -10,9 +10,11 @@ import com.neobanco.backend.repository.TransaccionRepository;
 import com.neobanco.backend.repository.UsuarioRepository;
 import com.neobanco.backend.service.EmailService;
 import com.neobanco.backend.service.LoginAttemptService;
+import com.neobanco.backend.service.TransferTransaction;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.data.mongodb.core.MongoTemplate;
 
 import java.util.Optional;
 
@@ -24,9 +26,13 @@ class AccountMovementTest {
     private final UsuarioRepository users = mock(UsuarioRepository.class);
     private final MetaAhorroRepository goals = mock(MetaAhorroRepository.class);
     private final TransaccionRepository transactions = mock(TransaccionRepository.class);
+    private final TransferTransaction transfer = mock(TransferTransaction.class, invocation -> {
+        java.util.function.Supplier<?> work = invocation.getArgument(0);
+        return work.get();
+    });
     private final UsuarioController controller = new UsuarioController(users, mock(TarjetaRepository.class),
             transactions, goals, mock(JwtService.class), mock(TotpService.class),
-            mock(EmailService.class), mock(LoginAttemptService.class));
+            mock(EmailService.class), mock(LoginAttemptService.class), mock(MongoTemplate.class), transfer);
 
     private MockHttpServletRequest requestFor(Usuario user) {
         MockHttpServletRequest request = new MockHttpServletRequest();

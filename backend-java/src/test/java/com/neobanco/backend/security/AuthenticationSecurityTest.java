@@ -10,6 +10,7 @@ import com.neobanco.backend.repository.TransaccionRepository;
 import com.neobanco.backend.repository.UsuarioRepository;
 import com.neobanco.backend.service.EmailService;
 import com.neobanco.backend.service.LoginAttemptService;
+import com.neobanco.backend.service.TransferTransaction;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.mongodb.core.MongoTemplate;
 
 import java.util.Optional;
 import java.util.Map;
@@ -34,7 +36,7 @@ class AuthenticationSecurityTest {
     private final LoginAttemptService attempts = mock(LoginAttemptService.class);
     private final UsuarioController controller = new UsuarioController(users, mock(TarjetaRepository.class),
             mock(TransaccionRepository.class), mock(MetaAhorroRepository.class), jwt, totp,
-            mock(EmailService.class), attempts);
+            mock(EmailService.class), attempts, mock(MongoTemplate.class), mock(TransferTransaction.class));
 
     @AfterEach void clearSecurityContext() { SecurityContextHolder.clearContext(); }
 

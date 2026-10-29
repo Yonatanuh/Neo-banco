@@ -12,12 +12,17 @@ import com.neobanco.backend.repository.UsuarioRepository;
 import com.neobanco.backend.security.JwtService;
 import com.neobanco.backend.security.TotpService;
 import com.neobanco.backend.service.EmailService;
+import com.neobanco.backend.service.TransferTransaction;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 import java.time.LocalDateTime;
 import java.security.SecureRandom;
@@ -38,6 +43,8 @@ public class UsuarioController {
     private final BCryptPasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final com.neobanco.backend.service.LoginAttemptService loginAttemptService;
+    private final MongoTemplate mongo;
+    private final TransferTransaction transferTransaction;
 
     @Autowired
     public UsuarioController(UsuarioRepository usuarioRepository,
@@ -47,7 +54,8 @@ public class UsuarioController {
                              JwtService jwtService,
                              TotpService totpService,
                              EmailService emailService,
-                             com.neobanco.backend.service.LoginAttemptService loginAttemptService) {
+                             com.neobanco.backend.service.LoginAttemptService loginAttemptService,
+                             MongoTemplate mongo, TransferTransaction transferTransaction) {
         this.usuarioRepository = usuarioRepository;
         this.tarjetaRepository = tarjetaRepository;
         this.transaccionRepository = transaccionRepository;
@@ -56,6 +64,8 @@ public class UsuarioController {
         this.totpService = totpService;
         this.emailService = emailService;
         this.loginAttemptService = loginAttemptService;
+        this.mongo = mongo;
+        this.transferTransaction = transferTransaction;
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
@@ -63,6 +73,45 @@ public class UsuarioController {
 
     private String generarCodigo() {
         return String.valueOf(100000 + SECURE_RANDOM.nextInt(900000));
+    }
+
+    private String emitirCodigo(Usuario usuario, String purpose) {
+        String code = generarCodigo();
+        usuario.setToken(passwordEncoder.encode(code));
+        usuario.setVerificationPurpose(purpose);
+        usuario.setVerificationExpiresAt(new Date(System.currentTimeMillis() + 15 * 60_000L));
+        usuario.setVerificationAttempts(0);
+        return code;
+    }
+
+    private boolean permitirEnvioCodigo(String email) {
+        String key = "codigo-correo:" + email.trim().toLowerCase(Locale.ROOT);
+        if (loginAttemptService.isBlocked(key)) return false;
+        loginAttemptService.loginFailed(key);
+        return true;
+    }
+
+    private void guardarCodigo(Usuario usuario) {
+        Update fields = new Update().set("token", usuario.getToken())
+                .set("verificationPurpose", usuario.getVerificationPurpose())
+                .set("verificationExpiresAt", usuario.getVerificationExpiresAt())
+                .set("verificationAttempts", 0);
+        if (mongo.updateFirst(Query.query(where("id").is(usuario.getId())), fields, Usuario.class).getMatchedCount() != 1) {
+            throw new IllegalStateException("No se pudo actualizar la solicitud de la cuenta");
+        }
+    }
+
+    private boolean consumirCodigo(Usuario usuario, String code, String purpose, Update update) {
+        if (usuario == null || usuario.getToken() == null || code == null || !code.matches("[0-9]{6}")) return false;
+        Date now = new Date();
+        Query eligible = Query.query(where("id").is(usuario.getId()).and("verificationPurpose").is(purpose)
+                .and("verificationExpiresAt").gt(now).and("verificationAttempts").lt(5).and("token").is(usuario.getToken()));
+        if (mongo.updateFirst(eligible, new Update().inc("verificationAttempts", 1), Usuario.class).getModifiedCount() != 1) return false;
+        if (!passwordEncoder.matches(code, usuario.getToken())) return false;
+        Query consume = Query.query(where("id").is(usuario.getId()).and("verificationPurpose").is(purpose)
+                .and("verificationExpiresAt").gt(new Date()).and("token").is(usuario.getToken()));
+        update.unset("token").unset("verificationPurpose").unset("verificationExpiresAt").unset("verificationAttempts");
+        return mongo.updateFirst(consume, update, Usuario.class).getModifiedCount() == 1;
     }
 
     private String generarNumeroRandom(int length) {
@@ -108,12 +157,13 @@ public class UsuarioController {
         if (existeUsuarioOpt.isPresent()) {
             Usuario existeUsuario = existeUsuarioOpt.get();
             if (!existeUsuario.getConfirmado()) {
-                existeUsuario.setToken(generarCodigo());
-                usuarioRepository.save(existeUsuario);
+                if (!permitirEnvioCodigo(emailLower)) return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new MessageResponse("Demasiadas solicitudes. Intenta más tarde."));
+                String code = emitirCodigo(existeUsuario, "REGISTRO");
+                guardarCodigo(existeUsuario);
                 
                 boolean correoEnviado = true;
                 try {
-                    emailService.enviarEmailRegistro(existeUsuario.getNombre(), existeUsuario.getEmail(), existeUsuario.getToken());
+                    emailService.enviarEmailRegistro(existeUsuario.getNombre(), existeUsuario.getEmail(), code);
                 } catch (Exception e) {
                     correoEnviado = false;
                 }
@@ -137,7 +187,7 @@ public class UsuarioController {
         nuevoUsuario.setNombre(request.getNombre());
         nuevoUsuario.setEmail(emailLower);
         nuevoUsuario.setPassword(passwordEncoder.encode(request.getPassword()));
-        nuevoUsuario.setToken(generarCodigo());
+        String registrationCode = emitirCodigo(nuevoUsuario, "REGISTRO");
         nuevoUsuario.setCreatedAt(LocalDateTime.now());
         nuevoUsuario.setUpdatedAt(LocalDateTime.now());
 
@@ -163,7 +213,7 @@ public class UsuarioController {
         // Enviar correo real
         boolean correoEnviado = true;
         try {
-            emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), usuarioGuardado.getToken());
+            emailService.enviarEmailRegistro(usuarioGuardado.getNombre(), usuarioGuardado.getEmail(), registrationCode);
         } catch (Exception e) {
             System.err.println("Error enviando correo (posible lÃ­mite de Sandbox de Resend): " + e.getMessage());
             correoEnviado = false;
@@ -184,25 +234,15 @@ public class UsuarioController {
 
     @PostMapping("/confirmar")
     public ResponseEntity<?> confirmarCuenta(@RequestBody Map<String, String> body) {
-        String token = body.get("token");
-        if (token == null || !token.matches("[0-9]{6}")) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Token requerido"));
+        String address = body.get("email"), code = body.get("token");
+        if (address == null || address.isBlank() || address.length() > 254 || code == null || !code.matches("[0-9]{6}")) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Correo y código de seis dígitos son obligatorios"));
         }
-
-        Optional<Usuario> usuarioOpt = usuarioRepository.findAll().stream()
-                .filter(u -> token.equals(u.getToken()))
-                .findFirst();
-
-        if (usuarioOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new MessageResponse("CÃ³digo no vÃ¡lido o ya fue utilizado"));
+        Usuario user = usuarioRepository.findByEmail(address.trim().toLowerCase(Locale.ROOT)).orElse(null);
+        if (!consumirCodigo(user, code, "REGISTRO", new Update().set("confirmado", true))) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Código inválido, vencido o sin intentos disponibles. Solicita uno nuevo."));
         }
-
-        Usuario usuario = usuarioOpt.get();
-        usuario.setConfirmado(true);
-        usuario.setToken("");
-        usuarioRepository.save(usuario);
-        return ResponseEntity.ok(new MessageResponse("Usuario Confirmado Correctamente"));
+        return ResponseEntity.ok(new MessageResponse("Usuario confirmado correctamente"));
     }
 
     // ============ REENVIAR CODIGO ============
@@ -224,9 +264,10 @@ public class UsuarioController {
             return ResponseEntity.badRequest().body(new MessageResponse("Esta cuenta ya estÃ¡ confirmada"));
         }
 
-        String nuevoToken = generarCodigo();
-        usuario.setToken(nuevoToken);
-        usuarioRepository.save(usuario);
+        if (!permitirEnvioCodigo(usuario.getEmail())) return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new MessageResponse("Demasiadas solicitudes. Intenta más tarde."));
+
+        String nuevoToken = emitirCodigo(usuario, "REGISTRO");
+        guardarCodigo(usuario);
 
         boolean enviado = true;
         try {
@@ -239,7 +280,7 @@ public class UsuarioController {
             ? "Nuevo cÃ³digo enviado a " + usuario.getEmail() + ". Revisa tu bandeja de entrada y la carpeta de Spam."
             : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
-        return ResponseEntity.ok(Map.of("mensaje", msg));
+        return ResponseEntity.status(enviado ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("mensaje", msg));
     }
 
     // ============ PING (DESPERTADOR) ============
@@ -273,12 +314,13 @@ public class UsuarioController {
         Usuario usuario = usuarioOpt.get();
 
         if (!usuario.getConfirmado()) {
+            if (!permitirEnvioCodigo(emailLower)) return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new MessageResponse("Demasiadas solicitudes. Intenta más tarde."));
             // Generar nuevo cÃ³digo y reenviar correo si la cuenta no estÃ¡ confirmada
-            usuario.setToken(generarCodigo());
-            usuarioRepository.save(usuario);
+            String code = emitirCodigo(usuario, "REGISTRO");
+            guardarCodigo(usuario);
             boolean correoEnviado = true;
             try {
-                emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), usuario.getToken());
+                emailService.enviarEmailRegistro(usuario.getNombre(), usuario.getEmail(), code);
             } catch (Exception e) {
                 correoEnviado = false;
             }
@@ -343,9 +385,9 @@ public class UsuarioController {
         }
 
         Usuario usuario = usuarioOpt.get();
-        String tokenGenerado = generarCodigo();
-        usuario.setToken(tokenGenerado);
-        usuarioRepository.save(usuario);
+        if (!permitirEnvioCodigo(usuario.getEmail())) return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new MessageResponse("Demasiadas solicitudes. Intenta más tarde."));
+        String tokenGenerado = emitirCodigo(usuario, "PASSWORD");
+        guardarCodigo(usuario);
 
         // Enviar correo real
         boolean correoEnviado = true;
@@ -364,37 +406,22 @@ public class UsuarioController {
 
 
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.status(correoEnviado ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
     // ============ NUEVO PASSWORD ============
 
     @PostMapping("/nuevo-password")
     public ResponseEntity<?> nuevoPassword(@RequestBody Map<String, String> body) {
-        String token = body.get("token");
-        String password = body.get("password");
-
-        if (token == null || !token.matches("[0-9]{6}") || password == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Token y contraseÃ±a son requeridos"));
+        String address = body.get("email"), code = body.get("token"), password = body.get("password");
+        if (address == null || address.isBlank() || address.length() > 254 || code == null || !code.matches("[0-9]{6}") || password == null || password.length() < 8 || password.length() > 72) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Correo, código y contraseña válida son obligatorios"));
         }
-        if (password.length() < 8) {
-            return ResponseEntity.badRequest().body(new MessageResponse("La contraseÃ±a debe tener al menos 8 caracteres"));
+        Usuario user = usuarioRepository.findByEmail(address.trim().toLowerCase(Locale.ROOT)).orElse(null);
+        if (!consumirCodigo(user, code, "PASSWORD", new Update().set("password", passwordEncoder.encode(password)).set("confirmado", true))) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Código inválido, vencido o sin intentos disponibles. Solicita uno nuevo."));
         }
-
-        Optional<Usuario> usuarioOpt = usuarioRepository.findAll().stream()
-                .filter(u -> token.equals(u.getToken()))
-                .findFirst();
-
-        if (usuarioOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Token no vÃ¡lido"));
-        }
-
-        Usuario usuario = usuarioOpt.get();
-        usuario.setPassword(passwordEncoder.encode(password));
-        usuario.setToken("");
-        usuario.setConfirmado(true); // Auto-confirmar si prueban que tienen el correo
-        usuarioRepository.save(usuario);
-        return ResponseEntity.ok(new MessageResponse("ContraseÃ±a modificada correctamente"));
+        return ResponseEntity.ok(new MessageResponse("Contraseña modificada correctamente"));
     }
 
     // ============ SOLICITAR ELIMINAR CUENTA ============
@@ -405,9 +432,10 @@ public class UsuarioController {
         Usuario usuario = usuarioRepository.findById(authUser.getId()).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
 
-        String token = generarCodigo();
-        usuario.setToken(token);
-        usuarioRepository.save(usuario);
+        if (!permitirEnvioCodigo(usuario.getEmail())) return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new MessageResponse("Demasiadas solicitudes. Intenta más tarde."));
+
+        String token = emitirCodigo(usuario, "ELIMINAR");
+        guardarCodigo(usuario);
 
         boolean correoEnviado = true;
         try {
@@ -420,28 +448,20 @@ public class UsuarioController {
             ? "Te hemos enviado un cÃ³digo de confirmaciÃ³n a tu correo electrÃ³nico."
             : "No fue posible enviar el correo. Intenta de nuevo en unos segundos.";
 
-        return ResponseEntity.ok(new MessageResponse(msg));
+        return ResponseEntity.status(correoEnviado ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).body(new MessageResponse(msg));
     }
 
     // ============ CONFIRMAR ELIMINAR CUENTA ============
 
     @DeleteMapping("/eliminar")
     public ResponseEntity<?> confirmarEliminarCuenta(@RequestBody Map<String, String> body, HttpServletRequest httpRequest) {
-        String token = body.get("token");
-        Usuario authUser = getAuthenticatedUser(httpRequest);
-        Usuario usuario = usuarioRepository.findById(authUser.getId()).orElse(null);
-        if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-
-        if (token == null || !token.matches("[0-9]{6}") || !token.equals(usuario.getToken())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("El cÃ³digo es incorrecto"));
+        Usuario user = getAuthenticatedUser(httpRequest);
+        if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        Usuario current = usuarioRepository.findById(user.getId()).orElse(null);
+        Update update = new Update().set("email", user.getEmail() + "_deleted_" + System.currentTimeMillis()).set("isActive", false);
+        if (!consumirCodigo(current, body.get("token"), "ELIMINAR", update)) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Código inválido, vencido o sin intentos disponibles"));
         }
-
-        // Soft delete
-        usuario.setEmail(usuario.getEmail() + "_deleted_" + System.currentTimeMillis());
-        usuario.setIsActive(false);
-        usuario.setToken("");
-        usuarioRepository.save(usuario);
-
         return ResponseEntity.ok(new MessageResponse("Cuenta eliminada correctamente"));
     }
 
@@ -553,6 +573,10 @@ public class UsuarioController {
 
     @PostMapping("/transferir")
     public ResponseEntity<?> transferir(@RequestBody TransferenciaRequest request, HttpServletRequest httpRequest) {
+        return transferTransaction.execute(() -> realizarTransferencia(request, httpRequest));
+    }
+
+    private ResponseEntity<?> realizarTransferencia(TransferenciaRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
         if (!montoValido(request.getMonto()) || request.getEmailDestino() == null || request.getEmailDestino().isBlank()) {
             return ResponseEntity.badRequest().body(new MessageResponse("Datos no vÃ¡lidos"));

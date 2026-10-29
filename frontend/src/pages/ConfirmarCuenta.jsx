@@ -20,6 +20,11 @@ const ConfirmarCuenta = () => {
     e.preventDefault();
     const tokenLimpio = token.trim();
 
+    if (!email.trim()) {
+      setMostrarEmail(true);
+      setAlerta({ error: true, msg: "Ingresa el correo de tu cuenta" });
+      return;
+    }
     if (tokenLimpio.length !== 6) {
       setAlerta({
         error: true,
@@ -31,6 +36,7 @@ const ConfirmarCuenta = () => {
     setVerificando(true);
     try {
       const { data } = await clienteAxios.post("/usuarios/confirmar", {
+        email: email.trim(),
         token: tokenLimpio,
       });
       setAlerta({ error: false, msg: data.mensaje });

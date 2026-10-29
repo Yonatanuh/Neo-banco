@@ -42,6 +42,9 @@ public class Usuario {
     private Boolean confirmado = false;
     private Boolean isActive = true;
     private String token;
+    private String verificationPurpose;
+    private Date verificationExpiresAt;
+    private Integer verificationAttempts;
     private String sobregiroEstado;
     private Double limiteSobregiro;
     

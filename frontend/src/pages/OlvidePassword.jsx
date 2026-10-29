@@ -25,6 +25,7 @@ const OlvidePassword = () => {
       });
 
       setAlerta({ error: false, msg: data.mensaje });
+      sessionStorage.setItem("email_recuperacion", email.trim());
       setEmail("");
 
       // Redirigir a la vista del PIN después de 2.5 segundos
