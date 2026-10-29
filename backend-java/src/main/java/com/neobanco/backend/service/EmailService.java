@@ -84,9 +84,11 @@ public class EmailService {
     private void enviarConGoogleScript(String to, String subject, String bodyHtml) {
         try {
             if (GOOGLE_SCRIPT_URL == null || GOOGLE_SCRIPT_URL.isBlank()) {
+                System.err.println("[EMAIL] Falta GOOGLE_SCRIPT_URL.");
                 throw new IllegalStateException("Servicio de correo no configurado");
             }
             if (googleScriptSecret == null || googleScriptSecret.isBlank()) {
+                System.err.println("[EMAIL] Falta GOOGLE_SCRIPT_SECRET.");
                 throw new IllegalStateException("Credencial del servicio de correo no configurada");
             }
             Map<String, String> payloadMap = new HashMap<>();
@@ -111,15 +113,16 @@ public class EmailService {
 
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() == 200 && response.body().contains("SUCCESS")) {
+            if (response.statusCode() == 200 && "SUCCESS".equals(response.body().trim())) {
                 System.out.println("[EMAIL] Solicitud aceptada por el proveedor.");
             } else {
+                System.err.println("[EMAIL] El proveedor rechazó la solicitud o no confirmó el envío (HTTP " + response.statusCode() + ").");
                 throw new RuntimeException("El proveedor no confirmó la entrega. Status: " + response.statusCode());
             }
 
         } catch (Exception e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            System.err.println("[EMAIL] No se pudo confirmar el envío.");
+            System.err.println("[EMAIL] No se pudo confirmar el envío (" + e.getClass().getSimpleName() + ").");
             throw new RuntimeException("No se pudo confirmar el envío de correo.", e);
         }
     }
