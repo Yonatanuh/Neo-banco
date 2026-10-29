@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AuthProvider } from "./context/AuthProvider";
 import Login from "./pages/Login";
 import Registrar from "./pages/Registrar";
 import ConfirmarCuenta from "./pages/ConfirmarCuenta";
-import Dashboard from "./pages/Dashboard";
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 import OlvidePassword from "./pages/OlvidePassword";
 import NuevoPassword from "./pages/NuevoPassword";
 
@@ -11,6 +12,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <Suspense fallback={<div role="status" className="min-h-screen bg-[#050510] text-white flex items-center justify-center">Cargando...</div>}>
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/registrar" element={<Registrar />} />
@@ -20,6 +22,7 @@ function App() {
           <Route path="/nuevo-password" element={<NuevoPassword />} />
           <Route path="/nuevo-password/:token" element={<NuevoPassword />} />
         </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

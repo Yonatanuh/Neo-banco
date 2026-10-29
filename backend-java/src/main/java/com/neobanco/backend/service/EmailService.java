@@ -18,6 +18,9 @@ public class EmailService {
     @org.springframework.beans.factory.annotation.Value("${google.script.url}")
     private String GOOGLE_SCRIPT_URL;
 
+    @org.springframework.beans.factory.annotation.Value("${google.script.secret:}")
+    private String googleScriptSecret;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public void enviarEmailRegistro(String nombre, String email, String token) {
@@ -70,9 +73,24 @@ public class EmailService {
         enviarConGoogleScript(email, asunto, htmlMsg);
     }
 
+    public void enviarRecuperacionDosFactores(String email, String code) {
+        String body = "<p>Solicitaste recuperar tu autenticación de dos factores en Neo Banco.</p>"
+                + "<p>Escribe este código en la aplicación. Vence en 15 minutos y solo se puede usar una vez:</p>"
+                + "<p><strong>" + code + "</strong></p>"
+                + "<p>Si no hiciste esta solicitud, ignora este correo y cambia tu contraseña.</p>";
+        enviarConGoogleScript(email, "Neo Banco - Recuperar autenticación", body);
+    }
+
     private void enviarConGoogleScript(String to, String subject, String bodyHtml) {
         try {
+            if (GOOGLE_SCRIPT_URL == null || GOOGLE_SCRIPT_URL.isBlank()) {
+                throw new IllegalStateException("Servicio de correo no configurado");
+            }
+            if (googleScriptSecret == null || googleScriptSecret.isBlank()) {
+                throw new IllegalStateException("Credencial del servicio de correo no configurada");
+            }
             Map<String, String> payloadMap = new HashMap<>();
+            payloadMap.put("secret", googleScriptSecret);
             payloadMap.put("to", to);
             payloadMap.put("subject", subject);
             payloadMap.put("html", bodyHtml);
@@ -86,6 +104,7 @@ public class EmailService {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(GOOGLE_SCRIPT_URL))
+                    .timeout(Duration.ofSeconds(20))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                     .build();
@@ -93,14 +112,15 @@ public class EmailService {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200 && response.body().contains("SUCCESS")) {
-                System.out.println("====== CORREO ENVIADO CON ÉXITO A: " + to + " (VÍA GOOGLE SCRIPT) ======");
+                System.out.println("[EMAIL] Solicitud aceptada por el proveedor.");
             } else {
-                throw new RuntimeException("Error en Google Script. Status: " + response.statusCode() + " Body: " + response.body());
+                throw new RuntimeException("El proveedor no confirmó la entrega. Status: " + response.statusCode());
             }
 
         } catch (Exception e) {
-            System.err.println("Excepción crítica intentando enviar correo vía Webhook: " + e.getMessage());
-            throw new RuntimeException("Error en EmailService: " + e.getMessage(), e);
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            System.err.println("[EMAIL] No se pudo confirmar el envío.");
+            throw new RuntimeException("No se pudo confirmar el envío de correo.", e);
         }
     }
 }

@@ -25,11 +25,12 @@ clienteAxios.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Si el error es 401 (Unauthorized) o 403 (Forbidden), el token caducó o la cuenta fue desactivada
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403)
-    ) {
+    const url = error.config?.url || "";
+    const isLogin = /^\/?usuarios\/(login|registro|confirmar|reenviar-codigo|olvide-password|nuevo-password|2fa\/recuperar|2fa\/restablecer)(?:[/?]|$)/.test(url);
+    const usedToken = error.config?.headers?.Authorization;
+    const currentToken = localStorage.getItem("token");
+    // A late 401 from a previous account cannot sign out a newer session.
+    if (error.response?.status === 401 && !isLogin && currentToken && usedToken === `Bearer ${currentToken}`) {
       localStorage.removeItem("token");
       // Opcional: Redirigir al usuario al login manualmente, aunque el AuthProvider debería detectarlo
       if (

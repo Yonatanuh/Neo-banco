@@ -22,12 +22,33 @@ const Login = () => {
 
   const [step2FA, setStep2FA] = useState(false);
   const [token2FA, setToken2FA] = useState("");
+  const [legacy2FA, setLegacy2FA] = useState(false);
+  const [recoveryRequested, setRecoveryRequested] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
 
   const { setAuth } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (legacy2FA) {
+      if (recoveryRequested && !recoveryCode.trim()) {
+        setAlerta({ error: true, msg: "Ingresa el código que recibiste por correo." });
+        return;
+      }
+      setCargando(true);
+      try {
+        const route = recoveryRequested ? "/usuarios/2fa/restablecer" : "/usuarios/2fa/recuperar";
+        const { data } = await clienteAxios.post(route, { email, password, ...(recoveryRequested ? { code: recoveryCode.trim() } : {}) });
+        setAlerta({ error: false, msg: data.mensaje });
+        if (!recoveryRequested) setRecoveryRequested(true);
+        else { setLegacy2FA(false); setRecoveryRequested(false); setRecoveryCode(""); setPassword(""); }
+      } catch (error) {
+        setAlerta({ error: true, msg: error.response?.data?.mensaje || "No se pudo completar la recuperación. Intenta nuevamente." });
+      } finally { setCargando(false); }
+      return;
+    }
 
     if (!step2FA) {
       if ([email, password].includes("")) {
@@ -42,6 +63,11 @@ const Login = () => {
           password,
         });
 
+        if (data.legacy2FA) {
+          setLegacy2FA(true);
+          setAlerta({ error: false, msg: data.mensaje });
+          return;
+        }
         if (data.require2FA) {
           setStep2FA(true);
           setAlerta({ error: false, msg: data.mensaje });
@@ -166,7 +192,15 @@ const Login = () => {
               </motion.div>
             )}
 
-            {!step2FA ? (
+            {legacy2FA ? (
+              <div className="space-y-3 text-sm text-slate-300">
+                <p>Renueva tu configuración anterior. Enviaremos un código de un solo uso al correo de tu cuenta.</p>
+                {recoveryRequested && <label className="block">Código recibido por correo
+                  <input type="text" autoComplete="one-time-code" maxLength="43" value={recoveryCode} onChange={e => setRecoveryCode(e.target.value)} disabled={cargando} className="mt-2 w-full p-3 rounded-xl bg-black/40 border border-white/10 text-white" />
+                </label>}
+                <button type="button" onClick={() => { setLegacy2FA(false); setRecoveryRequested(false); setRecoveryCode(""); setAlerta({ error: false, msg: "" }); }} className="text-cyan-400" disabled={cargando}>Volver al inicio de sesión</button>
+              </div>
+            ) : !step2FA ? (
               <>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-300 ml-1">
@@ -269,7 +303,7 @@ const Login = () => {
               ) : (
                 <>
                   <span>
-                    {step2FA ? "Verificar Identidad" : "Ingresar Seguro"}
+                    {legacy2FA ? (recoveryRequested ? "Recuperar acceso" : "Enviar código al correo") : step2FA ? "Verificar Identidad" : "Ingresar Seguro"}
                   </span>
                   <ArrowRight size={18} />
                 </>
@@ -277,7 +311,7 @@ const Login = () => {
             </motion.button>
           </form>
 
-          {!step2FA && (
+          {!step2FA && !legacy2FA && (
             <div className="mt-8 text-center text-sm text-slate-400">
               ¿No tienes una cuenta?{" "}
               <Link

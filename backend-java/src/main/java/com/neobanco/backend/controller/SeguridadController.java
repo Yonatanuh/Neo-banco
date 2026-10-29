@@ -2,6 +2,8 @@ package com.neobanco.backend.controller;
 
 import com.neobanco.backend.model.Usuario;
 import com.neobanco.backend.repository.UsuarioRepository;
+import com.neobanco.backend.security.TotpService;
+import com.neobanco.backend.service.LoginAttemptService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/seguridad")
@@ -19,6 +20,10 @@ public class SeguridadController {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+    @Autowired
+    private TotpService totpService;
+    @Autowired
+    private LoginAttemptService loginAttemptService;
 
     @PostMapping({"/kyc", "/kyc/upload"})
     public ResponseEntity<?> uploadKYC(@RequestAttribute("usuarioId") String usuarioId, @RequestParam("file") MultipartFile file) {
@@ -64,21 +69,20 @@ public class SeguridadController {
             }
             Usuario usuario = usuarioOpt.get();
 
-            // NOTE: Replace with actual TOTP secret generation library method (e.g. GoogleAuthenticator or otplib equivalent)
-            String secret = UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+            if (Boolean.TRUE.equals(usuario.getDosFA_activo())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("mensaje", "La autenticación de dos factores ya está activa."));
+            }
+            String secret = totpService.generateSecret();
             usuario.setDosFA_secret(secret);
             usuarioRepository.save(usuario);
 
-            String otpauth = String.format("otpauth://totp/NeoBanco:%s?secret=%s&issuer=NeoBanco", usuario.getEmail(), secret);
-            
-            // NOTE: Replace with actual QR Code base64 generation using a library like ZXing
-            String qrCodeUrl = "data:image/png;base64,TODO_GENERATE_QR_CODE_BASE64"; 
+            String otpauth = totpService.provisioningUri(usuario.getEmail(), secret);
 
             Map<String, Object> response = new HashMap<>();
             response.put("mensaje", "QR Generado");
             response.put("secret", secret);
-            response.put("qrCodeUrl", qrCodeUrl);
-            return ResponseEntity.ok(response);
+            response.put("otpauthUri", otpauth);
+            return ResponseEntity.ok().header("Cache-Control", "no-store").body(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("mensaje", "Error al generar 2FA"));
         }
@@ -94,17 +98,23 @@ public class SeguridadController {
             }
             Usuario usuario = usuarioOpt.get();
 
+            if (Boolean.TRUE.equals(usuario.getDosFA_activo())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("mensaje", "La autenticación de dos factores ya está activa."));
+            }
+
             if (usuario.getDosFA_secret() == null) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("mensaje", "Primero debes generar el QR"));
             }
 
-            // NOTE: Replace with actual TOTP verification library method
-            boolean isValid = token != null && !token.isEmpty(); // Mocking result
-            
-            if (!isValid) {
+            String attemptKey = "2fa-setup:" + usuarioId;
+            if (loginAttemptService.isBlocked(attemptKey)) {
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("mensaje", "Demasiados intentos. Intenta de nuevo más tarde."));
+            }
+            if (!totpService.verify(usuario.getDosFA_secret(), token == null ? null : token.trim())) {
+                loginAttemptService.loginFailed(attemptKey);
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("mensaje", "El código no es válido"));
             }
-
+            loginAttemptService.loginSucceeded(attemptKey);
             usuario.setDosFA_activo(true);
             usuarioRepository.save(usuario);
 

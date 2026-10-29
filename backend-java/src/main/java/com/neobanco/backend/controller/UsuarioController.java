@@ -10,6 +10,7 @@ import com.neobanco.backend.repository.TarjetaRepository;
 import com.neobanco.backend.repository.TransaccionRepository;
 import com.neobanco.backend.repository.UsuarioRepository;
 import com.neobanco.backend.security.JwtService;
+import com.neobanco.backend.security.TotpService;
 import com.neobanco.backend.service.EmailService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,17 +20,21 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.security.SecureRandom;
 import java.util.*;
 
 @RestController
 @RequestMapping("/api/usuarios")
 public class UsuarioController {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final UsuarioRepository usuarioRepository;
     private final TarjetaRepository tarjetaRepository;
     private final TransaccionRepository transaccionRepository;
     private final MetaAhorroRepository metaAhorroRepository;
     private final JwtService jwtService;
+    private final TotpService totpService;
     private final BCryptPasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final com.neobanco.backend.service.LoginAttemptService loginAttemptService;
@@ -40,6 +45,7 @@ public class UsuarioController {
                              TransaccionRepository transaccionRepository,
                              MetaAhorroRepository metaAhorroRepository,
                              JwtService jwtService,
+                             TotpService totpService,
                              EmailService emailService,
                              com.neobanco.backend.service.LoginAttemptService loginAttemptService) {
         this.usuarioRepository = usuarioRepository;
@@ -47,6 +53,7 @@ public class UsuarioController {
         this.transaccionRepository = transaccionRepository;
         this.metaAhorroRepository = metaAhorroRepository;
         this.jwtService = jwtService;
+        this.totpService = totpService;
         this.emailService = emailService;
         this.loginAttemptService = loginAttemptService;
         this.passwordEncoder = new BCryptPasswordEncoder();
@@ -55,16 +62,19 @@ public class UsuarioController {
     // ============ UTILIDADES ============
 
     private String generarCodigo() {
-        return String.valueOf(100000 + new Random().nextInt(900000));
+        return String.valueOf(100000 + SECURE_RANDOM.nextInt(900000));
     }
 
     private String generarNumeroRandom(int length) {
-        Random random = new Random();
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < length; i++) {
-            sb.append(random.nextInt(10));
+            sb.append(SECURE_RANDOM.nextInt(10));
         }
         return sb.toString();
+    }
+
+    private boolean montoValido(Double monto) {
+        return monto != null && Double.isFinite(monto) && monto > 0;
     }
 
     private Usuario getAuthenticatedUser(HttpServletRequest request) {
@@ -117,9 +127,6 @@ public class UsuarioController {
                 response.put("require2FA", true);
 
                 
-                System.out.println("==================================================");
-                System.out.println("REENVIO DE TOKEN PARA " + emailLower + ": " + existeUsuario.getToken());
-                System.out.println("==================================================");
                 
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
             }
@@ -169,9 +176,6 @@ public class UsuarioController {
             response.put("mensaje", "Cuenta creada. Hubo un problema al enviar el correo. Usa el botÃ³n de reenvÃ­o en la siguiente pantalla.");
         }
 
-        System.out.println("==================================================");
-        System.out.println("TOKEN DE VERIFICACION PARA " + emailLower + ": " + usuarioGuardado.getToken());
-        System.out.println("==================================================");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -181,7 +185,7 @@ public class UsuarioController {
     @PostMapping("/confirmar")
     public ResponseEntity<?> confirmarCuenta(@RequestBody Map<String, String> body) {
         String token = body.get("token");
-        if (token == null || token.isBlank()) {
+        if (token == null || !token.matches("[0-9]{6}")) {
             return ResponseEntity.badRequest().body(new MessageResponse("Token requerido"));
         }
 
@@ -266,7 +270,6 @@ public class UsuarioController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Email o contraseÃ±a incorrectos"));
         }
 
-        loginAttemptService.loginSucceeded(emailLower);
         Usuario usuario = usuarioOpt.get();
 
         if (!usuario.getConfirmado()) {
@@ -292,6 +295,9 @@ public class UsuarioController {
         }
 
         if (usuario.getDosFA_activo() != null && usuario.getDosFA_activo()) {
+            if (totpService.isLegacySecret(usuario.getDosFA_secret())) {
+                return ResponseEntity.ok(Map.of("legacy2FA", true, "mensaje", "Tu configuración anterior debe renovarse mediante tu correo."));
+            }
             if (request.getToken2FA() == null) {
                 return ResponseEntity.ok(Map.of(
                         "require2FA", true,
@@ -299,8 +305,13 @@ public class UsuarioController {
                         "mensaje", "Se requiere cÃ³digo 2FA"
                 ));
             }
+            if (!totpService.verify(usuario.getDosFA_secret(), request.getToken2FA().trim())) {
+                loginAttemptService.loginFailed(emailLower);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Código de autenticación incorrecto"));
+            }
         }
 
+        loginAttemptService.loginSucceeded(emailLower);
         String token = jwtService.generateToken(usuario.getId());
 
         AuthResponse response = AuthResponse.builder()
@@ -352,9 +363,6 @@ public class UsuarioController {
         }
 
 
-        System.out.println("==================================================");
-        System.out.println("TOKEN DE RECUPERACION PARA " + email + ": " + tokenGenerado);
-        System.out.println("==================================================");
 
         return ResponseEntity.ok(response);
     }
@@ -366,7 +374,7 @@ public class UsuarioController {
         String token = body.get("token");
         String password = body.get("password");
 
-        if (token == null || password == null) {
+        if (token == null || !token.matches("[0-9]{6}") || password == null) {
             return ResponseEntity.badRequest().body(new MessageResponse("Token y contraseÃ±a son requeridos"));
         }
         if (password.length() < 8) {
@@ -424,7 +432,7 @@ public class UsuarioController {
         Usuario usuario = usuarioRepository.findById(authUser.getId()).orElse(null);
         if (usuario == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
 
-        if (!token.equals(usuario.getToken())) {
+        if (token == null || !token.matches("[0-9]{6}") || !token.equals(usuario.getToken())) {
             return ResponseEntity.badRequest().body(new MessageResponse("El cÃ³digo es incorrecto"));
         }
 
@@ -463,7 +471,7 @@ public class UsuarioController {
     @PostMapping("/depositar")
     public ResponseEntity<?> depositar(@RequestBody MontoRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
-        if (request.getMonto() == null || request.getMonto() <= 0) {
+        if (!montoValido(request.getMonto())) {
             return ResponseEntity.badRequest().body(new MessageResponse("Monto no vÃ¡lido"));
         }
 
@@ -489,7 +497,7 @@ public class UsuarioController {
     @PostMapping("/retirar")
     public ResponseEntity<?> retirar(@RequestBody MontoRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
-        if (request.getMonto() == null || request.getMonto() <= 0) {
+        if (!montoValido(request.getMonto())) {
             return ResponseEntity.badRequest().body(new MessageResponse("Monto no vÃ¡lido"));
         }
 
@@ -508,10 +516,10 @@ public class UsuarioController {
             if (fraccion > 0) {
                 double redondeo = 1 - fraccion;
                 if (usuario.getSaldo() >= redondeo) {
-                    usuario.setSaldo(usuario.getSaldo() - redondeo);
                     Optional<MetaAhorro> metaOpt = metaAhorroRepository.findById(usuario.getMetaRedondeoId());
-                    if (metaOpt.isPresent()) {
+                    if (metaOpt.isPresent() && usuario.getId().equals(metaOpt.get().getUsuario())) {
                         MetaAhorro meta = metaOpt.get();
+                        usuario.setSaldo(usuario.getSaldo() - redondeo);
                         meta.setAhorrado(meta.getAhorrado() + redondeo);
                         metaAhorroRepository.save(meta);
 
@@ -546,7 +554,7 @@ public class UsuarioController {
     @PostMapping("/transferir")
     public ResponseEntity<?> transferir(@RequestBody TransferenciaRequest request, HttpServletRequest httpRequest) {
         Usuario authUser = getAuthenticatedUser(httpRequest);
-        if (request.getMonto() == null || request.getMonto() <= 0 || request.getEmailDestino() == null) {
+        if (!montoValido(request.getMonto()) || request.getEmailDestino() == null || request.getEmailDestino().isBlank()) {
             return ResponseEntity.badRequest().body(new MessageResponse("Datos no vÃ¡lidos"));
         }
 
@@ -610,10 +618,10 @@ public class UsuarioController {
             if (fraccion > 0) {
                 double redondeo = 1 - fraccion;
                 if (usuarioOrigen.getSaldo() >= redondeo) {
-                    usuarioOrigen.setSaldo(usuarioOrigen.getSaldo() - redondeo);
                     Optional<MetaAhorro> metaOpt = metaAhorroRepository.findById(usuarioOrigen.getMetaRedondeoId());
-                    if (metaOpt.isPresent()) {
+                    if (metaOpt.isPresent() && usuarioOrigen.getId().equals(metaOpt.get().getUsuario())) {
                         MetaAhorro meta = metaOpt.get();
+                        usuarioOrigen.setSaldo(usuarioOrigen.getSaldo() - redondeo);
                         meta.setAhorrado(meta.getAhorrado() + redondeo);
                         metaAhorroRepository.save(meta);
 

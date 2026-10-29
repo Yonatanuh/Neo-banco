@@ -22,7 +22,10 @@ const AuthProvider = ({ children }) => {
         setAuth(data);
       } catch (error) {
         setAuth({});
-        localStorage.removeItem("token");
+        // A network or server outage is not evidence that the session expired.
+        if ([401, 403].includes(error.response?.status) && localStorage.getItem("token") === token) {
+          localStorage.removeItem("token");
+        }
       }
 
       setCargando(false);

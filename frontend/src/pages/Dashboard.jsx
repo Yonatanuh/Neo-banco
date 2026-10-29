@@ -51,7 +51,7 @@ const COLORS = [
 
 import { io } from "socket.io-client";
 import { QRCodeSVG } from "qrcode.react";
-import QRScanner from "../components/QRScanner";
+const QRScanner = React.lazy(() => import("../components/QRScanner"));
 import AIChat from "../components/AIChat";
 
 const Dashboard = () => {
@@ -820,7 +820,8 @@ const Dashboard = () => {
   const generar2FA = async () => {
     try {
       const { data } = await clienteAxios.post("/seguridad/2fa/generar");
-      setQrCodeUrl(data.qrCodeUrl);
+      if (!data.otpauthUri) throw new Error("No se pudo generar el código de configuración.");
+      setQrCodeUrl(data.otpauthUri);
       setMensaje({
         tipo: "exito",
         texto: "QR Generado, escanealo con Google Authenticator",
@@ -1691,6 +1692,7 @@ const Dashboard = () => {
                         <p className="text-slate-400 font-semibold mb-4">
                           Escanear QR (Para Enviar)
                         </p>
+                        <React.Suspense fallback={<p role="status" className="text-slate-400">Cargando escáner...</p>}>
                         <QRScanner
                           onScanSuccess={(decodedText) => {
                             // The decoded text should be the email directly if they scanned our QR
@@ -1703,6 +1705,7 @@ const Dashboard = () => {
                             });
                           }}
                         />
+                        </React.Suspense>
                       </div>
                     </div>
                   )}
@@ -2057,11 +2060,7 @@ const Dashboard = () => {
                         ) : (
                           <div className="w-full flex flex-col sm:flex-row gap-8 items-center">
                             <div className="bg-white p-4 rounded-xl">
-                              <img
-                                src={qrCodeUrl}
-                                alt="QR Code 2FA"
-                                className="w-48 h-48"
-                              />
+                              <QRCodeSVG value={qrCodeUrl} size={192} title="Código QR para configurar la autenticación de dos factores" />
                             </div>
                             <div className="flex-1 w-full">
                               <p className="text-slate-300 mb-4">

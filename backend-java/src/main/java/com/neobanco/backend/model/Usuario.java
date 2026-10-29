@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.Map;
 
 @Data
@@ -52,6 +53,8 @@ public class Usuario {
     private String documentoIdUrl;
     private String dosFA_secret;
     private Boolean dosFA_activo = false;
+    private String legacyTwoFactorRecoveryHash;
+    private Date legacyTwoFactorRecoveryExpiresAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

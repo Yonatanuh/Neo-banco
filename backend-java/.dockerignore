@@ -1,0 +1,15 @@
+target/
+jdk21/
+apache-maven-*/
+.git/
+.vscode/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.code-workspace
+*.bat
+*.ps1
